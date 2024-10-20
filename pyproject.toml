@@ -12,6 +12,7 @@ motor = "^3.6.0"
 uvicorn = {extras = ["all"], version = "^0.32.0"}
 ipython = "^8.28.0"
 pytest = "^8.3.3"
+pytest-asyncio = "^0.24.0"
 
 
 [build-system]
