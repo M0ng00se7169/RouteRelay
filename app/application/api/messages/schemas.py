@@ -15,5 +15,5 @@ class CreateChatResponseSchema(BaseModel):
     def from_entity(cls, chat: Chat) -> 'CreateChatResponseSchema':
         return CreateChatResponseSchema(
             oid=chat.oid,
-            title=chat.title
+            title=chat.title.as_generic_type()
         )
