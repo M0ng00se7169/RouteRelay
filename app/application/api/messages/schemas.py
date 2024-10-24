@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import ClassVar
 
 from pydantic import BaseModel
 
@@ -66,4 +67,4 @@ class ChatDetailSchema(BaseModel):
 
 
 class GetMessagesQueryResponseSchema(BaseQueryResponseSchema):
-    items = list[MessageDetailSchema]
+    message_items: ClassVar[list[MessageDetailSchema]] = list[MessageDetailSchema]
