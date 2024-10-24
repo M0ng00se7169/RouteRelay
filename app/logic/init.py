@@ -8,6 +8,8 @@ from infrastructure.repositories.messages.mongo import MongoDBChatsRepository, M
 from logic.commands.messages import CreateChatCommand, CreateChatCommandHandler, CreateMessageCommandHandler, \
     CreateMessageCommand
 from logic.mediator import Mediator
+from logic.queries.messages import GetChatDetailQueryHandler, GetChatDetailQuery, GetMessagesQueryHandler, \
+    GetMessagesQuery
 from settings.config import Config
 
 
@@ -19,7 +21,6 @@ def init_container():
 def _init_container() -> Container:
     container = Container()
 
-    container.register(CreateChatCommandHandler)
     container.register(Config, instance=Config(), scope=Scope.singleton)
 
     config: Config = container.resolve(Config)
@@ -41,14 +42,19 @@ def _init_container() -> Container:
         return MongoDBMessagesRepository(
             mongo_db_client=client,
             mongo_db_db_name=config.mongodb_chat_database,
-            mongo_db_collection_name=config.mongodb_chat_collection,
+            mongo_db_collection_name=config.mongodb_messages_collection,
         )
 
     container.register(BaseChatsRepository, factory=init_chats_mongodb_repository, scope=Scope.singleton)
     container.register(BaseMessagesRepository, factory=init_messages_mongodb_repository, scope=Scope.singleton)
+
     # Command handlers
     container.register(CreateChatCommandHandler)
     container.register(CreateMessageCommandHandler)
+
+    # Query handlers
+    container.register(GetChatDetailQueryHandler)
+    container.register(GetMessagesQueryHandler)
 
     def init_mediator() -> Mediator:
         mediator = Mediator()
@@ -60,7 +66,14 @@ def _init_container() -> Container:
             CreateMessageCommand,
             [container.resolve(CreateMessageCommandHandler)]
         )
-
+        mediator.register_command(
+            GetChatDetailQuery,
+            container.resolve(GetChatDetailQueryHandler)
+        )
+        mediator.register_query(
+            GetMessagesQuery,
+            container.resolve(GetMessagesQueryHandler),
+        )
         return mediator
 
     container.register(Mediator, factory=init_mediator)
