@@ -66,7 +66,7 @@ def _init_container() -> Container:
             producer=AIOKafkaProducer(bootstrap_servers=config.kafka_url)     # Maybe change to 'consumer=AIOKafkaConsumer()'
         )
 
-    container.register(BaseMessageBroker, factory=create_message_broker, scope=Scope.singleton)
+    container.register(BaseMessageBroker, factory=create_message_broker)
 
     def init_mediator() -> Mediator:
         mediator = Mediator()

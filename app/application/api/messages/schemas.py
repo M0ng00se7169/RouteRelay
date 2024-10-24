@@ -54,7 +54,7 @@ class MessageDetailSchema(BaseModel):
 
 class ChatDetailSchema(BaseModel):
     oid: str
-    text: str
+    title: str
     created_at: datetime
 
     @classmethod
