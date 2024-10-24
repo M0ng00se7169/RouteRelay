@@ -1,5 +1,4 @@
 from dataclasses import dataclass, field
-from datetime import datetime
 
 from domain.entities.base import BaseEntity
 from domain.events.messages import NewMessageReceivedEvent, NewChatCreatedEvent
@@ -8,6 +7,7 @@ from domain.values.messages import Title, Text
 
 @dataclass(eq=False)
 class Message(BaseEntity):
+    chat_oid: str
     text: Text
 
 
