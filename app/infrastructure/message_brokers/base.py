@@ -6,7 +6,7 @@ from dataclasses import dataclass
 class BaseMessageBroker(ABC):
 
     @abstractmethod
-    async def send_message(self, topic: str, value: bytes):
+    async def send_message(self, topic: str, key: bytes, value: bytes):
         ...
 
     @abstractmethod

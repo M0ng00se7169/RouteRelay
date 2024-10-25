@@ -4,6 +4,7 @@ from aiokafka import AIOKafkaProducer
 from motor.motor_asyncio import AsyncIOMotorClient
 from punq import Container, Scope
 
+from domain.events.messages import NewChatCreatedEvent
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.message_brokers.kafka import KafkaMessageBroker
 from infrastructure.repositories.messages.base import BaseChatsRepository, BaseMessagesRepository
@@ -66,7 +67,7 @@ def _init_container() -> Container:
             producer=AIOKafkaProducer(bootstrap_servers=config.kafka_url)     # Maybe change to 'consumer=AIOKafkaConsumer()'
         )
 
-    container.register(BaseMessageBroker, factory=create_message_broker)
+    container.register(BaseMessageBroker, factory=create_message_broker, scope=Scope.singleton)
 
     def init_mediator() -> Mediator:
         mediator = Mediator()
@@ -85,7 +86,7 @@ def _init_container() -> Container:
             message_broker=container.resolve(BaseMessageBroker)
         )
         mediator.register_event(
-            NewChatCreatedEventHandler,
+            NewChatCreatedEvent,
             [new_chat_created_event_handler]
         )
         mediator.register_command(
