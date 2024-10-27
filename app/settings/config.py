@@ -9,5 +9,5 @@ class Config(BaseSettings):
     mongodb_messages_collection: str = Field(default='messages', alias='MONGODB_MESSAGES_COLLECTION')
 
     new_chats_event_topic: str = Field(default='new-chats-topic')
-    new_message_received_topic: str = Field(default='new-message-received-topic')
+    new_message_received_topic: str = Field(default='new-messages')
     kafka_url: str = Field(default='kafka:29092')

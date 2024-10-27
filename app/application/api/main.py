@@ -1,18 +1,19 @@
 from contextlib import asynccontextmanager
 
 from application.api.lifespan import (
-    start_kafka,
-    stop_kafka,
+    close_message_broker,
+    init_message_broker,
 )
 from application.api.messages.handlers import router as message_router
+from application.api.messages.websockets.messages import router as message_ws_router
 from fastapi import FastAPI
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await start_kafka()
+    await init_message_broker()
     yield
-    await stop_kafka()
+    await close_message_broker()
 
 
 def create_app() -> FastAPI:
@@ -24,5 +25,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
     app.include_router(message_router, prefix='/chat')
+    app.include_router(message_ws_router, prefix='/chats')
 
     return app

@@ -1,6 +1,13 @@
 from functools import lru_cache
 
-from aiokafka import AIOKafkaProducer
+from aiokafka import (
+    AIOKafkaConsumer,
+    AIOKafkaProducer,
+)
+from application.api.common.websockets.managers import (
+    BaseConnectionManager,
+    ConnectionManager,
+)
 from domain.events.messages import (
     NewChatCreatedEvent,
     NewMessageReceivedEvent,
@@ -86,7 +93,12 @@ def _init_container() -> Container:
 
     def create_message_broker() -> BaseMessageBroker:
         return KafkaMessageBroker(
-            producer=AIOKafkaProducer(bootstrap_servers=config.kafka_url),     # Maybe change to 'consumer=AIOKafkaConsumer()'
+            producer=AIOKafkaProducer(bootstrap_servers=config.kafka_url),
+            consumer=AIOKafkaConsumer(
+                bootstrap_servers=config.kafka_url,
+                group_id='chat',
+                metadata_max_age_ms=30000,
+            ),
         )
 
     container.register(BaseMessageBroker, factory=create_message_broker, scope=Scope.singleton)
@@ -139,5 +151,6 @@ def _init_container() -> Container:
 
     container.register(Mediator, factory=init_mediator)
     container.register(EventMediator, factory=init_mediator)
+    container.register(BaseConnectionManager, instance=ConnectionManager(), scope=Scope.singleton)
 
     return container

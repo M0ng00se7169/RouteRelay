@@ -25,5 +25,5 @@ class NewMessageReceivedEventHandler(EventHandler[NewMessageReceivedEvent, None]
         await self.message_broker.send_message(
             topic=self.broker_topic,
             value=convert_event_to_broker_message(event=event),
-            key=str(event.event_id).encode(),
+            key=event.chat_oid.encode(),
         )
