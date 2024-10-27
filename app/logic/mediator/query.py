@@ -1,6 +1,18 @@
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
-from logic.queries.base import QR, QT, BaseQuery, BaseQueryHandler
+from abc import (
+    ABC,
+    abstractmethod,
+)
+from dataclasses import (
+    dataclass,
+    field,
+)
+
+from logic.queries.base import (
+    BaseQuery,
+    BaseQueryHandler,
+    QR,
+    QT,
+)
 
 
 @dataclass(eq=False)

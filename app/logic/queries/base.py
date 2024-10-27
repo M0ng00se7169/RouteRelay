@@ -1,6 +1,13 @@
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass
-from typing import TypeVar, Any, Generic
+from typing import (
+    Any,
+    Generic,
+    TypeVar,
+)
 
 
 @dataclass(frozen=True)

@@ -1,30 +1,47 @@
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 
 from domain.events.base import BaseEvent
-from logic.commands.base import CommandHandler, CT, CR, BaseCommand
-from logic.events.base import ET, EventHandler, ER
+from logic.commands.base import (
+    BaseCommand,
+    CommandHandler,
+    CR,
+    CT,
+)
+from logic.events.base import (
+    ER,
+    ET,
+    EventHandler,
+)
 from logic.exceptions.mediator import CommandHandlersNotRegisteredException
 from logic.mediator.command import CommandMediator
 from logic.mediator.event import EventMediator
 from logic.mediator.query import QueryMediator
-from logic.queries.base import QT, BaseQueryHandler, QR, BaseQuery
+from logic.queries.base import (
+    BaseQuery,
+    BaseQueryHandler,
+    QR,
+    QT,
+)
 
 
 @dataclass(eq=False)
 class Mediator(EventMediator, QueryMediator, CommandMediator):
     events_map: dict[ET, EventHandler] = field(
         default_factory=lambda: defaultdict(list),
-        kw_only=True
+        kw_only=True,
     )
     commands_map: dict[CT, CommandHandler] = field(
         default_factory=lambda: defaultdict(list),
-        kw_only=True
+        kw_only=True,
     )
     queries_map: dict[QT, BaseQueryHandler] = field(
         default_factory=dict,
-        kw_only=True
+        kw_only=True,
     )
 
     def register_event(self, event: ET, event_handlers: Iterable[EventHandler[ET, ER]]):
@@ -42,8 +59,6 @@ class Mediator(EventMediator, QueryMediator, CommandMediator):
         for event in events:
             handlers: Iterable[EventHandler] = self.events_map[event.__class__]
             result.extend([await handler.handle(event) for handler in handlers])
-
-        # await self.message_broker.send_message()
 
         return result
 

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
 from aiokafka.producer import AIOKafkaProducer
-
 from infrastructure.message_brokers.base import BaseMessageBroker
 
 

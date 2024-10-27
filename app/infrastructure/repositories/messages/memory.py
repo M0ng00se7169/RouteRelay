@@ -1,4 +1,7 @@
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 
 from domain.entities.messages import Chat
 from infrastructure.repositories.messages.base import BaseChatsRepository
@@ -18,9 +21,11 @@ class MemoryChatRepository(BaseChatsRepository):
 
     async def check_chat_exists_by_title(self, title: str) -> bool:
         try:
-            return bool(next(
-                chat for chat in self._saved_chats if chat.title.as_generic_type() == title
-            ))
+            return bool(
+                next(
+                    chat for chat in self._saved_chats if chat.title.as_generic_type() == title
+                ),
+            )
         except StopIteration:
             return False
 

@@ -2,13 +2,22 @@ from abc import ABC
 from dataclasses import dataclass
 from typing import Iterable
 
-from motor.core import AgnosticClient
-
 from application.api.messages.filters import GetMessagesFilters
-from domain.entities.messages import Chat, Message
-from infrastructure.repositories.messages.base import BaseChatsRepository, BaseMessagesRepository
-from infrastructure.repositories.messages.converters import convert_chat_entity_to_document, \
-    convert_chat_document_to_entity, convert_message_entity_to_document, convert_message_document_to_entity
+from domain.entities.messages import (
+    Chat,
+    Message,
+)
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
+from infrastructure.repositories.messages.converters import (
+    convert_chat_document_to_entity,
+    convert_chat_entity_to_document,
+    convert_message_document_to_entity,
+    convert_message_entity_to_document,
+)
+from motor.core import AgnosticClient
 
 
 @dataclass
@@ -43,7 +52,7 @@ class MongoDBChatsRepository(BaseChatsRepository, BaseMongoDBRepository):
 class MongoDBMessagesRepository(BaseMessagesRepository, BaseMongoDBRepository):
     async def add_message(self, message: Message) -> None:
         await self._collection.insert_one(
-            document=convert_message_entity_to_document(message)
+            document=convert_message_entity_to_document(message),
         )
 
     async def get_messages(self, chat_oid: str, filters: GetMessagesFilters) -> tuple[Iterable[Message], int]:

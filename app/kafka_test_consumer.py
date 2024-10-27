@@ -1,5 +1,6 @@
-from aiokafka import AIOKafkaConsumer
 import asyncio
+
+from aiokafka import AIOKafkaConsumer
 
 
 async def consume():

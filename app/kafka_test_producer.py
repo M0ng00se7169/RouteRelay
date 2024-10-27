@@ -1,5 +1,6 @@
-from aiokafka import AIOKafkaProducer
 import asyncio
+
+from aiokafka import AIOKafkaProducer
 
 
 async def send_one():
