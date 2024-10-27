@@ -1,15 +1,33 @@
-from fastapi import APIRouter, status, Depends, HTTPException
-from punq import Container
-
 from application.api.messages.filters import GetMessagesFilters
-from application.api.messages.schemas import CreateChatResponseSchema, CreateChatRequestSchema, CreateMessageSchema, \
-    ChatDetailSchema, GetMessagesQueryResponseSchema, MessageDetailSchema, CreateMessageResponseSchema
+from application.api.messages.schemas import (
+    ChatDetailSchema,
+    CreateChatRequestSchema,
+    CreateChatResponseSchema,
+    CreateMessageResponseSchema,
+    CreateMessageSchema,
+    GetMessagesQueryResponseSchema,
+    MessageDetailSchema,
+)
 from application.api.schemas import ErrorSchema
 from domain.exceptions.base import ApplicationException
-from logic.commands.messages import CreateChatCommand, CreateMessageCommand
+from fastapi import (
+    APIRouter,
+    Depends,
+    HTTPException,
+    status,
+)
+from logic.commands.messages import (
+    CreateChatCommand,
+    CreateMessageCommand,
+)
 from logic.init import init_container
 from logic.mediator.base import Mediator
-from logic.queries.messages import GetChatDetailQuery, GetMessagesQuery
+from logic.queries.messages import (
+    GetChatDetailQuery,
+    GetMessagesQuery,
+)
+from punq import Container
+
 
 router = APIRouter(tags=['Chat'])
 
@@ -25,7 +43,7 @@ router = APIRouter(tags=['Chat'])
 )
 async def create_chat_handler(
     schema: CreateChatRequestSchema,
-    container: Container = Depends(init_container)
+    container: Container = Depends(init_container),
 ):
     """
     Create a new chat based on the provided request schema.
@@ -48,8 +66,8 @@ async def create_chat_handler(
     description='Create a new message. Returns 400 error if message with the same oid already exists',
     responses={
         status.HTTP_201_CREATED: {'model': CreateMessageSchema},
-        status.HTTP_400_BAD_REQUEST: {'model': ErrorSchema}
-    }
+        status.HTTP_400_BAD_REQUEST: {'model': ErrorSchema},
+    },
 )
 async def create_message_handler(
     chat_oid: str,
@@ -72,10 +90,10 @@ async def create_message_handler(
     description='Get info about chat and all it\'s messages',
     responses={
         status.HTTP_200_OK: {'model': ChatDetailSchema},
-        status.HTTP_400_BAD_REQUEST: {'model': ErrorSchema}
-    }
+        status.HTTP_400_BAD_REQUEST: {'model': ErrorSchema},
+    },
 )
-async def get_chat_messages_handler(
+async def get_chat_detail_handler(
     chat_oid: str,
     container: Container = Depends(init_container),
 ) -> ChatDetailSchema:
@@ -107,7 +125,7 @@ async def get_chat_messages_handler(
 
     try:
         messages, count = await mediator.handle_query(
-            GetMessagesQuery(chat_oid=chat_oid, filters=filters.to_infrastructure())
+            GetMessagesQuery(chat_oid=chat_oid, filters=filters.to_infrastructure()),
         )
     except ApplicationException as exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'error': exception.message})

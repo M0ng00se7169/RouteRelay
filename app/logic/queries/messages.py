@@ -2,10 +2,19 @@ from dataclasses import dataclass
 from typing import Iterable
 
 from application.api.messages.filters import GetMessagesFilters
-from domain.entities.messages import Chat, Message
-from infrastructure.repositories.messages.base import BaseChatsRepository, BaseMessagesRepository
+from domain.entities.messages import (
+    Chat,
+    Message,
+)
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
 from logic.exceptions.messages import ChatNotFoundException
-from logic.queries.base import BaseQuery, BaseQueryHandler
+from logic.queries.base import (
+    BaseQuery,
+    BaseQueryHandler,
+)
 
 
 @dataclass(frozen=True)

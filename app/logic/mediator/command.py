@@ -1,16 +1,27 @@
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from collections import defaultdict
 from collections.abc import Iterable
-from dataclasses import dataclass, field
+from dataclasses import (
+    dataclass,
+    field,
+)
 
-from logic.commands.base import CT, CommandHandler, CR, BaseCommand
+from logic.commands.base import (
+    BaseCommand,
+    CommandHandler,
+    CR,
+    CT,
+)
 
 
 @dataclass(eq=False)
 class CommandMediator(ABC):
     commands_map: dict[CT, CommandHandler] = field(
         default_factory=lambda: defaultdict(list),
-        kw_only=True
+        kw_only=True,
     )
 
     @abstractmethod

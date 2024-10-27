@@ -1,9 +1,17 @@
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass
-from typing import TypeVar, Any, Generic
+from typing import (
+    Any,
+    Generic,
+    TypeVar,
+)
 
 from domain.events.base import BaseEvent
 from infrastructure.message_brokers.base import BaseMessageBroker
+
 
 ET = TypeVar('ET', bound=BaseEvent)
 ER = TypeVar('ER', bound=Any)

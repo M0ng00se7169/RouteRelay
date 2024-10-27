@@ -1,5 +1,4 @@
 import orjson as orjson
-
 from domain.events.base import BaseEvent
 
 

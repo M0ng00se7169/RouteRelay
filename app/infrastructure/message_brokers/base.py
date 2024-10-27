@@ -1,4 +1,7 @@
-from abc import ABC, abstractmethod
+from abc import (
+    ABC,
+    abstractmethod,
+)
 from dataclasses import dataclass
 
 
@@ -6,9 +9,21 @@ from dataclasses import dataclass
 class BaseMessageBroker(ABC):
 
     @abstractmethod
-    async def send_message(self, topic: str, value: bytes):
+    async def start(self):
         ...
 
     @abstractmethod
-    async def consume(self, topic: str):
+    async def close(self):
+        ...
+
+    @abstractmethod
+    async def send_message(self, topic: str, key: bytes, value: bytes):
+        ...
+
+    @abstractmethod
+    async def start_consuming(self, topic: str):
+        ...
+
+    @abstractmethod
+    async def stop_consuming(self):
         ...
