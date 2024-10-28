@@ -4,14 +4,6 @@ from aiokafka import (
     AIOKafkaConsumer,
     AIOKafkaProducer,
 )
-from application.api.common.websockets.managers import (
-    BaseConnectionManager,
-    ConnectionManager,
-)
-from domain.events.messages import (
-    NewChatCreatedEvent,
-    NewMessageReceivedEvent,
-)
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.message_brokers.kafka import KafkaMessageBroker
 from infrastructure.repositories.messages.base import (
@@ -21,6 +13,20 @@ from infrastructure.repositories.messages.base import (
 from infrastructure.repositories.messages.mongo import (
     MongoDBChatsRepository,
     MongoDBMessagesRepository,
+)
+from motor.motor_asyncio import AsyncIOMotorClient
+from punq import (
+    Container,
+    Scope,
+)
+
+from application.api.common.websockets.managers import (
+    BaseConnectionManager,
+    ConnectionManager,
+)
+from domain.events.messages import (
+    NewChatCreatedEvent,
+    NewMessageReceivedEvent,
 )
 from logic.commands.messages import (
     CreateChatCommand,
@@ -35,15 +41,12 @@ from logic.events.messages import (
 from logic.mediator.base import Mediator
 from logic.mediator.event import EventMediator
 from logic.queries.messages import (
+    GetAllChatsQuery,
+    GetAllChatsQueryHandler,
     GetChatDetailQuery,
     GetChatDetailQueryHandler,
     GetMessagesQuery,
     GetMessagesQueryHandler,
-)
-from motor.motor_asyncio import AsyncIOMotorClient
-from punq import (
-    Container,
-    Scope,
 )
 from settings.config import Config
 
@@ -90,6 +93,7 @@ def _init_container() -> Container:
     # Query handlers
     container.register(GetChatDetailQueryHandler)
     container.register(GetMessagesQueryHandler)
+    container.register(GetAllChatsQueryHandler)
 
     def create_message_broker() -> BaseMessageBroker:
         return KafkaMessageBroker(
@@ -147,6 +151,11 @@ def _init_container() -> Container:
             GetMessagesQuery,
             container.resolve(GetMessagesQueryHandler),
         )
+        mediator.register_query(
+            GetAllChatsQuery,
+            container.resolve(GetAllChatsQueryHandler),
+        )
+
         return mediator
 
     container.register(Mediator, factory=init_mediator)
