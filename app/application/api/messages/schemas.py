@@ -1,12 +1,12 @@
 from datetime import datetime
-from typing import ClassVar
+
+from pydantic import BaseModel
 
 from application.api.schemas import BaseQueryResponseSchema
 from domain.entities.messages import (
     Chat,
     Message,
 )
-from pydantic import BaseModel
 
 
 class CreateChatRequestSchema(BaseModel):
@@ -68,5 +68,9 @@ class ChatDetailSchema(BaseModel):
         )
 
 
-class GetMessagesQueryResponseSchema(BaseQueryResponseSchema):
-    message_items: ClassVar[list[MessageDetailSchema]] = list[MessageDetailSchema]
+class GetMessagesQueryResponseSchema(BaseQueryResponseSchema[list[MessageDetailSchema]]):
+    ...
+
+
+class GetAllChatsQueryResponseSchema(BaseQueryResponseSchema[list[ChatDetailSchema]]):
+    ...

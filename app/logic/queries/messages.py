@@ -1,14 +1,18 @@
 from dataclasses import dataclass
 from typing import Iterable
 
-from application.api.messages.filters import GetMessagesFilters
-from domain.entities.messages import (
-    Chat,
-    Message,
+from infrastructure.repositories.filters.messages import (
+    GetAllChatsFilters,
+    GetMessagesFilters,
 )
 from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
     BaseMessagesRepository,
+)
+
+from domain.entities.messages import (
+    Chat,
+    Message,
 )
 from logic.exceptions.messages import ChatNotFoundException
 from logic.queries.base import (
@@ -26,6 +30,11 @@ class GetChatDetailQuery(BaseQuery):
 class GetMessagesQuery(BaseQuery):
     chat_oid: str
     filters: GetMessagesFilters
+
+
+@dataclass(frozen=True)
+class GetAllChatsQuery(BaseQuery):
+    filters: GetAllChatsFilters
 
 
 @dataclass(frozen=True)
@@ -51,3 +60,11 @@ class GetMessagesQueryHandler(BaseQueryHandler):
             chat_oid=query.chat_oid,
             filters=query.filters,
         )
+
+
+@dataclass(frozen=True)
+class GetAllChatsQueryHandler(BaseQueryHandler[GetAllChatsQuery, Iterable[Chat]]):
+    chats_repository: BaseChatsRepository
+
+    async def handle(self, query: GetAllChatsQuery) -> Iterable[Chat]: #type: ignore
+        return await self.chats_repository.get_all_chats(filters=query.filters)
