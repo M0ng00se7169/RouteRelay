@@ -1,5 +1,10 @@
 from dataclasses import dataclass
 
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
+
 from domain.entities.messages import (
     Chat,
     Message,
@@ -7,10 +12,6 @@ from domain.entities.messages import (
 from domain.values.messages import (
     Text,
     Title,
-)
-from infrastructure.repositories.messages.base import (
-    BaseChatsRepository,
-    BaseMessagesRepository,
 )
 from logic.commands.base import (
     BaseCommand,
@@ -67,3 +68,23 @@ class CreateMessageCommandHandler(CommandHandler[CreateMessageCommand, Chat]):
         await self._mediator.publish(chat.pull_events())
 
         return message
+
+
+@dataclass(frozen=True)
+class DeleteChatCommand(BaseCommand):
+    chat_oid: str
+
+
+@dataclass(frozen=True)
+class DeleteChatCommandHandler(CommandHandler[DeleteChatCommand, None]):
+    chats_repository: BaseChatsRepository
+
+    async def handle(self, command: DeleteChatCommand) -> None:
+        chat = await self.chats_repository.get_chat_by_oid(oid=command.chat_oid)
+
+        if not chat:
+            raise ChatNotFoundException(chat_oid=command.chat_oid)
+
+        await self.chats_repository.delete_chat_by_oid(chat_oid=command.chat_oid)
+        chat.delete()
+        await self._mediator.publish(chat.pull_events())
