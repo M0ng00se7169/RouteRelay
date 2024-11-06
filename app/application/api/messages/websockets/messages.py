@@ -33,6 +33,7 @@ async def messages_handlers(
         await websocket.accept()
         await websocket.send_json(data={'error': error.message})
         await websocket.close()
+
     await connection_manager.accept_connection(websocket=websocket, key=str(chat_oid))
 
     await websocket.send_text("You are now connected!")

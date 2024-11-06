@@ -26,10 +26,13 @@ from punq import (
 
 from domain.events.messages import (
     ChatDeletedEvent,
+    ListenerAddedEvent,
     NewChatCreatedEvent,
     NewMessageReceivedEvent,
 )
 from logic.commands.messages import (
+    AddTelegramListenerCommand,
+    AddTelegramListenerCommandHandler,
     CreateChatCommand,
     CreateChatCommandHandler,
     CreateMessageCommand,
@@ -39,6 +42,7 @@ from logic.commands.messages import (
 )
 from logic.events.messages import (
     ChatDeletedEventHandler,
+    ListenerAddedEventHandler,
     NewChatCreatedEventHandler,
     NewMessageReceivedEventHandler,
     NewMessageReceivedFromBrokerEvent,
@@ -150,6 +154,15 @@ def _init_container() -> Container:
             broker_topic=config.chat_deleted_topic,
             connection_manager=container.resolve(BaseConnectionManager),
         )
+        add_telegram_listener_handler = AddTelegramListenerCommandHandler(
+            _mediator=mediator,
+            chats_repository=container.resolve(BaseChatsRepository),
+        )
+        new_listener_added_handler = ListenerAddedEventHandler(
+            message_broker=container.resolve(BaseMessageBroker),
+            broker_topic=config.new_listener_added_topic,
+            connection_manager=container.resolve(BaseConnectionManager),
+        )
 
         mediator.register_event(
             NewChatCreatedEvent,
@@ -190,6 +203,14 @@ def _init_container() -> Container:
         mediator.register_query(
             GetAllChatsQuery,
             container.resolve(GetAllChatsQueryHandler),
+        )
+        mediator.register_event(
+            ListenerAddedEvent,
+            [new_listener_added_handler],
+        )
+        mediator.register_command(
+            AddTelegramListenerCommand,
+            [add_telegram_listener_handler],
         )
 
         return mediator
