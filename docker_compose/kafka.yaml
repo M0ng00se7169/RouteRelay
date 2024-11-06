@@ -11,7 +11,7 @@ services:
       - backend
   kafka:
     image: confluentinc/cp-kafka:latest
-    container_name: main-kafka
+    container_name: kafka
     depends_on:
       - zookeeper
     ports:

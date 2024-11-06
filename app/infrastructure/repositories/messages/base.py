@@ -8,6 +8,7 @@ from typing import Iterable
 from application.api.messages.filters import GetMessagesFilters
 from domain.entities.messages import (
     Chat,
+    ChatListener,
     Message,
 )
 
@@ -33,6 +34,14 @@ class BaseChatsRepository(ABC):
 
     @abstractmethod
     async def delete_chat_by_oid(self, chat_oid: str) -> None:
+        ...
+
+    @abstractmethod
+    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str):
+        ...
+
+    @abstractmethod
+    async def get_all_chat_listeners(self, chat_oid: str) -> Iterable[ChatListener]:
         ...
 
 

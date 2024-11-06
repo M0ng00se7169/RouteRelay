@@ -12,7 +12,10 @@ from application.api.messages.filters import (
     GetMessagesFilters,
 )
 from application.api.messages.schemas import (
+    AddTelegramListenerResponseSchema,
+    AddTelegramListenerSchema,
     ChatDetailSchema,
+    ChatListenerListItemSchema,
     CreateChatRequestSchema,
     CreateChatResponseSchema,
     CreateMessageResponseSchema,
@@ -24,6 +27,7 @@ from application.api.messages.schemas import (
 from application.api.schemas import ErrorSchema
 from domain.exceptions.base import ApplicationException
 from logic.commands.messages import (
+    AddTelegramListenerCommand,
     CreateChatCommand,
     CreateMessageCommand,
     DeleteChatCommand,
@@ -31,6 +35,7 @@ from logic.commands.messages import (
 from logic.init import init_container
 from logic.mediator.base import Mediator
 from logic.queries.messages import (
+    GetAllChatsListenersQuery,
     GetAllChatsQuery,
     GetChatDetailQuery,
     GetMessagesQuery,
@@ -163,7 +168,7 @@ async def get_all_chats_handler(
     mediator: Mediator = container.resolve(Mediator)
     try:
         chats, count = await mediator.handle_query(
-            GetAllChatsQuery(filters=filters.to_infra()),
+            GetAllChatsQuery(filters=filters.to_infrastructure()),
         )
     except ApplicationException as exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'error': exception.message})
@@ -191,3 +196,59 @@ async def delete_chat_handler(
         await mediator.handle_command(DeleteChatCommand(chat_oid=chat_oid))
     except ApplicationException as exception:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'error': exception.message})
+
+
+@router.post(
+    '/{chat_oid}/listeners/',
+    status_code=status.HTTP_201_CREATED,
+    summary='Add telegram tech support listener to chat',
+    description='Add telegram tech support listener to chat',
+    operation_id='addTelegramListenerToChat',
+    response_model=AddTelegramListenerResponseSchema,
+)
+async def add_chat_listener_handler(
+    chat_oid: str,
+    schema: AddTelegramListenerSchema,
+    container: Container = Depends(init_container),
+) -> AddTelegramListenerResponseSchema:
+    mediator: Mediator = container.resolve(Mediator)
+
+    try:
+        listener, *_ = await mediator.handle_command(
+            AddTelegramListenerCommand(
+                chat_oid=chat_oid,
+                telegram_chat_id=schema.telegram_chat_id,
+            ),
+        )
+    except ApplicationException as exception:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={'error': exception.message},
+        )
+
+    return AddTelegramListenerResponseSchema.from_entity(listener)
+
+
+@router.get(
+    '/{chat_oid}/listeners/',
+    status_code=status.HTTP_200_OK,
+    description='Retrieve all listeners for this chat',
+    responses={
+        status.HTTP_200_OK: {'model': list[ChatListenerListItemSchema]},
+        status.HTTP_400_BAD_REQUEST: {'model': ErrorSchema},
+    },
+    summary='Retrieve all listeners for this chat',
+    operation_id='getAllChatListeners',
+)
+async def get_all_chat_listeners_handler(
+    chat_oid: str,
+    container: Container = Depends(init_container),
+) -> list[ChatListenerListItemSchema]:
+    mediator: Mediator = container.resolve(Mediator)
+
+    try:
+        chat_listeners = await mediator.handle_query(GetAllChatsListenersQuery(chat_oid=chat_oid))
+    except ApplicationException as exception:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={'error': exception.message})
+
+    return [ChatListenerListItemSchema.from_entity(chat_listener=chat_listener) for chat_listener in chat_listeners]
