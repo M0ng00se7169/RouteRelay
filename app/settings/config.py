@@ -11,6 +11,14 @@ class Config(BaseSettings):
 
     outbox_relay_poll_interval: float = Field(default=1.0, alias='OUTBOX_RELAY_POLL_INTERVAL')
 
+    # JWT signing secret for the HS256 serializer (infrastructure/serializers/jwt.py).
+    jwt_secret: str = Field(default='supersecret', alias='JWT_SECRET')
+
+    # OAuth2 password flow: single demo user. Credentials are compared in
+    # constant time (settings/security.py).
+    auth_username: str = Field(default='admin', alias='AUTH_USERNAME')
+    auth_password: str = Field(default='admin', alias='AUTH_PASSWORD')
+
     new_chats_event_topic: str = Field(default='new-chats-topic')
     new_message_received_topic: str = Field(default='new-messages')
     kafka_url: str = Field(default='kafka:29092')
