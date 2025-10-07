@@ -158,10 +158,18 @@ kafka_consumer_malformed_total = Counter(
 	'chat_oid/message) — counted instead of published.',
 )
 
+kafka_consumer_reconnects_total = Counter(
+	'kafka_consumer_reconnects_total',
+	'Number of consumer reconnection attempts after the Kafka stream died or '
+	'exited cleanly, per topic (the loop retries with exponential backoff).',
+	['topic'],
+)
+
 kafka_consumer_up = Gauge(
 	'kafka_consumer_up',
-	'1 while the Kafka consumer loop task is running, 0 after graceful stop '
-	'or unexpected task death.',
+	'1 while the Kafka consumer loop task is running (including through '
+	'reconnect backoff — watch reconnects_total for outages), 0 after graceful '
+	'stop, unexpected task death, or clean loop exit.',
 )
 
 
@@ -270,6 +278,26 @@ telegram_notifications_failed_total = Counter(
 )
 
 
+# --- Circuit breaker (Mongo persistence path) --------------------------------
+# Emitted by app/infrastructure/resilience.py. The `name` label is a closed set
+# (currently only 'mongo' — one breaker guards the whole persistence path, D3).
+# state: 0 = closed (healthy), 1 = open or half-open (failing fast / probing).
+
+circuit_breaker_state = Gauge(
+	'circuit_breaker_state',
+	'Circuit breaker state per guarded dependency: 0 = closed, 1 = open or '
+	'half-open (rejecting or probing).',
+	['name'],
+)
+
+circuit_breaker_rejected_total = Counter(
+	'circuit_breaker_rejected_total',
+	'Number of calls rejected immediately (fail fast) because the breaker was '
+	'open, per guarded dependency.',
+	['name'],
+)
+
+
 # --- Application info (G5) ----------------------------------------------------
 # Emitted by create_app() (app/application/api/main.py). A constant 1 with the
 # version as a label — standard Prometheus build-info pattern for deployment
@@ -297,6 +325,7 @@ application_info = Gauge(
 # | kafka_consumer_events_published_total | Counter | topic | consumer loop  |
 # | kafka_consumer_errors_total     | Counter | topic  | consumer loop         |
 # | kafka_consumer_malformed_total  | Counter | —      | consumer loop         |
+# | kafka_consumer_reconnects_total | Counter | topic  | consumer loop         |
 # | kafka_consumer_up               | Gauge   | —      | consumer lifecycle    |
 # | ws_connections_active           | Gauge   | —      | WS manager            |
 # | ws_connections_accepted_total   | Counter | —      | WS manager            |
@@ -311,6 +340,8 @@ application_info = Gauge(
 # | telegram_notifications_sent_total   | Counter | — | Telegram handler (Chunk 6.1) |
 # | telegram_notifications_failed_total | Counter | — | Telegram handler (Chunk 6.1) |
 # | application_info                | Gauge   | version | create_app() (Chunk 6.2) |
+# | circuit_breaker_state           | Gauge   | name    | circuit breaker (resilience) |
+# | circuit_breaker_rejected_total  | Counter | name    | circuit breaker (resilience) |
 #
 # Every metric above is now owned in the table; the historical per-chunk
 # trailer was removed once all planned metrics landed in it.
