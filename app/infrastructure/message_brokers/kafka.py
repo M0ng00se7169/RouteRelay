@@ -36,7 +36,7 @@ class KafkaMessageBroker(BaseMessageBroker):
 		await self.producer.start()
 		await self.consumer.start()
 
-	async def send_message(self, key: bytes, topic: str, value: bytes):
+	async def send_message(self, topic: str, key: bytes, value: bytes):
 		if self.producer is None:
 			raise RuntimeError('KafkaMessageBroker.send_message called before start()')
 		await self.producer.send(topic=topic, key=key, value=value)
