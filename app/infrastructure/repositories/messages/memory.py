@@ -3,12 +3,17 @@ from dataclasses import (
     field,
 )
 
+from application.api.messages.filters import GetMessagesFilters
+from infrastructure.repositories.filters.messages import GetAllChatsFilters
 from domain.entities.messages import (
     Chat,
     ChatListener,
+    Message,
 )
-from infrastructure.repositories.messages.base import BaseChatsRepository
-
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
 
 @dataclass
 class MemoryChatRepository(BaseChatsRepository):
@@ -35,8 +40,8 @@ class MemoryChatRepository(BaseChatsRepository):
     async def add_chat(self, chat: Chat, session=None) -> None:
         self._saved_chats.append(chat)
 
-    async def get_all_chats(self, limit: int, offset: int) -> tuple[list[Chat], int]:
-        chats = self._saved_chats[offset:offset + limit]
+    async def get_all_chats(self, filters: GetAllChatsFilters) -> tuple[list[Chat], int]:
+        chats = self._saved_chats[filters.offset:filters.offset + filters.limit]
         return chats, len(self._saved_chats)
 
     async def delete_chat_by_oid(self, chat_oid: str, session=None) -> None:
@@ -58,3 +63,21 @@ class MemoryChatRepository(BaseChatsRepository):
         if chat is None:
             return []
         return list(chat.listeners)
+
+
+@dataclass
+class MemoryMessagesRepository(BaseMessagesRepository):
+    _saved_messages: list[Message] = field(default_factory=list, kw_only=True)
+
+    async def add_message(self, message: Message, session=None) -> None:
+        self._saved_messages.append(message)
+
+    async def get_messages(
+        self,
+        chat_oid: str,
+        filters: GetMessagesFilters,
+    ) -> tuple[list[Message], int]:
+        messages = [m for m in self._saved_messages if m.chat_oid == chat_oid]
+        count = len(messages)
+        paginated = messages[filters.offset:filters.offset + filters.limit]
+        return paginated, count

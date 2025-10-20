@@ -1,10 +1,16 @@
+from unittest.mock import AsyncMock
+
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.relay import OutboxRelay
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.messages.base import BaseChatsRepository
-from infrastructure.repositories.messages.memory import MemoryChatRepository
+from infrastructure.repositories.messages.memory import (
+    MemoryChatRepository,
+    MemoryMessagesRepository,
+)
+from infrastructure.repositories.messages.base import BaseMessagesRepository
 from logic.init import (
 	build_mediator,
 	init_container,
@@ -38,6 +44,12 @@ class _NoopOutboxRelay(OutboxRelay):
 def init_dummy_container() -> Container:
 	container = init_container()
 	container.register(BaseChatsRepository, MemoryChatRepository, scope=Scope.singleton)
+	container.register(BaseMessagesRepository, MemoryMessagesRepository, scope=Scope.singleton)
+	container.register(
+		BaseMessageBroker,
+		instance=AsyncMock(spec=BaseMessageBroker),
+		scope=Scope.singleton,
+	)
 	container.register(BaseOutboxRepository, MemoryOutboxRepository, scope=Scope.singleton)
 	container.register(SessionProvider, instance=_NullSessionProvider(), scope=Scope.singleton)
 	container.register(
@@ -56,6 +68,8 @@ def init_dummy_container() -> Container:
 	# the next resolve rebuilds them from the overridden registrations.
 	for key in (
 		BaseChatsRepository,
+		BaseMessagesRepository,
+		BaseMessageBroker,
 		BaseOutboxRepository,
 		SessionProvider,
 		OutboxRelay,

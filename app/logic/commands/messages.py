@@ -11,7 +11,10 @@ from domain.entities.messages import (
     ChatListener,
     Message,
 )
-from domain.values.messages import Title
+from domain.values.messages import (
+    Text,
+    Title,
+)
 from domain.events.base import BaseEvent
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.session import SessionProvider
@@ -19,7 +22,10 @@ from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
     BaseMessagesRepository,
 )
-from logic.exceptions.messages import ChatWithThatTitleAlreadyExistsException
+from logic.exceptions.messages import (
+    ChatNotFoundException,
+    ChatWithThatTitleAlreadyExistsException,
+)
 from logic.mediator.base import EventMediator
 
 
@@ -89,7 +95,15 @@ class CreateMessageCommandHandler:
 
     async def handle(self, command: CreateMessageCommand) -> Message:
         chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
-        message: Message = chat.add_message(message_text=command.text)
+
+        if not chat:
+            raise ChatNotFoundException(chat_oid=command.chat_oid)
+
+        message: Message = Message(
+            chat_oid=command.chat_oid,
+            text=Text(command.text),
+        )
+        chat.add_message(message)
         events = chat.pull_events()
         async with _maybe_transaction(self.session_provider) as session:
             await self.messages_repository.add_message(message, session=session)
@@ -112,7 +126,11 @@ class DeleteChatCommandHandler:
 
     async def handle(self, command: DeleteChatCommand) -> None:
         chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
-        chat.delete_chat()
+
+        if not chat:
+            raise ChatNotFoundException(chat_oid=command.chat_oid)
+
+        chat.delete()
         events = chat.pull_events()
         async with _maybe_transaction(self.session_provider) as session:
             await self.chats_repository.delete_chat_by_oid(command.chat_oid, session=session)
@@ -163,8 +181,12 @@ class AddTelegramListenerCommandHandler:
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider
 
-    async def handle(self, command: AddTelegramListenerCommand) -> None:
+    async def handle(self, command: AddTelegramListenerCommand) -> ChatListener:
         chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
+
+        if not chat:
+            raise ChatNotFoundException(chat_oid=command.chat_oid)
+
         chat.register_telegram_listener(telegram_chat_id=command.telegram_chat_id)
         events = chat.pull_events()
         async with _maybe_transaction(self.session_provider) as session:
@@ -175,3 +197,5 @@ class AddTelegramListenerCommandHandler:
             )
             await self.outbox_repository.save_events(events, session=session)
         await self._mediator.publish(events)
+
+        return ChatListener(oid=command.telegram_chat_id)
