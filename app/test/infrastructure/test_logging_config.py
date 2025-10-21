@@ -1,9 +1,8 @@
 import logging
-import pytest
 
 from infrastructure.logging_config import (
-    JSONFormatter,
     configure_json_logging,
+    JSONFormatter,
 )
 
 

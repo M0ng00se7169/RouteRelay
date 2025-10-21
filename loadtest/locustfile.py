@@ -1,4 +1,9 @@
-from locust import FastHttpUser, between, task
+from locust import (
+    between,
+    FastHttpUser,
+    task,
+)
+
 
 API_BASE = '/chat'
 
@@ -16,7 +21,7 @@ class KafkaChatUser(FastHttpUser):
 		# Pre-create a chat once per user, then exercise the message endpoints
 		# against that chat for the rest of the run.
 		resp = self.client.post(
-			API_BASE, json={'name': 'load-test-chat'}, name='POST /chat'
+			API_BASE, json={'name': 'load-test-chat'}, name='POST /chat',
 		)
 		if resp.status_code == 200:
 			self.chat_id = resp.json().get('oid')

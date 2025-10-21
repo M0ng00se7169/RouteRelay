@@ -1,17 +1,19 @@
 import asyncio
 from contextlib import asynccontextmanager
 
+from fastapi import FastAPI
+
+from infrastructure.logging_config import configure_json_logging
+from prometheus_fastapi_instrumentator import PrometheusFastApiInstrumentator
+
 from application.api.lifespan import (
-	close_message_broker,
-	init_message_broker,
-	start_relay,
-	stop_relay,
+    close_message_broker,
+    init_message_broker,
+    start_relay,
+    stop_relay,
 )
 from application.api.messages.handlers import router as message_router
 from application.api.messages.websockets.messages import router as message_ws_router
-from fastapi import FastAPI
-from infrastructure.logging_config import configure_json_logging
-from prometheus_fastapi_instrumentator import PrometheusFastApiInstrumentator
 
 
 @asynccontextmanager

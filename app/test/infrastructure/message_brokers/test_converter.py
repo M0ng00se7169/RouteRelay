@@ -1,12 +1,12 @@
 import orjson
+from infrastructure.message_brokers.converters import convert_event_to_broker_message
 
 from domain.events.messages import (
-	ChatDeletedEvent,
-	ListenerAddedEvent,
-	NewChatCreatedEvent,
-	NewMessageReceivedEvent,
+    ChatDeletedEvent,
+    ListenerAddedEvent,
+    NewChatCreatedEvent,
+    NewMessageReceivedEvent,
 )
-from infrastructure.message_brokers.converters import convert_event_to_broker_message
 
 
 def test_converter_roundtrip_new_chat_created():

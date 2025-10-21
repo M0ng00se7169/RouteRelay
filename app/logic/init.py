@@ -1,19 +1,18 @@
 from functools import lru_cache
 
-from aiokafka import (
-    AIOKafkaConsumer,
-    AIOKafkaProducer,
-)
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.message_brokers.kafka import KafkaMessageBroker
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.mapper import resolve_topic
 from infrastructure.outbox.mongo import MongoOutboxRepository
 from infrastructure.outbox.relay import (
-    OutboxRelay,
     build_relay,
+    OutboxRelay,
 )
-from infrastructure.outbox.session import MongoSessionProvider, SessionProvider
+from infrastructure.outbox.session import (
+    MongoSessionProvider,
+    SessionProvider,
+)
 from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
     BaseMessagesRepository,

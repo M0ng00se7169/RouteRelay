@@ -1,11 +1,18 @@
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import (
+    datetime,
+    timezone,
+)
 from typing import Callable
 from uuid import uuid4
 
-from domain.events.base import BaseEvent
 from infrastructure.message_brokers.converters import convert_event_to_broker_message
-from infrastructure.outbox.base import BaseOutboxRepository, OutboxRow
+from infrastructure.outbox.base import (
+    BaseOutboxRepository,
+    OutboxRow,
+)
+
+from domain.events.base import BaseEvent
 
 
 @dataclass

@@ -1,14 +1,12 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock
-
-from domain.entities.messages import (
-    Chat,
-    ChatListener,
-    Message,
+from unittest.mock import (
+    AsyncMock,
+    MagicMock,
 )
-from domain.values.messages import (
-    Text,
-    Title,
+
+import pytest
+from infrastructure.repositories.filters.messages import (
+    GetAllChatsFilters,
+    GetMessagesFilters,
 )
 from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
@@ -19,9 +17,15 @@ from infrastructure.repositories.messages.mongo import (
     MongoDBChatsRepository,
     MongoDBMessagesRepository,
 )
-from infrastructure.repositories.filters.messages import (
-    GetAllChatsFilters,
-    GetMessagesFilters,
+
+from domain.entities.messages import (
+    Chat,
+    ChatListener,
+    Message,
+)
+from domain.values.messages import (
+    Text,
+    Title,
 )
 
 
@@ -162,7 +166,7 @@ async def test_mongo_get_chat_by_oid_found():
 
     assert chat.oid == 'c1'
     assert chat.title.as_generic_type() == 'hello'
-    assert {l.oid for l in chat.listeners} == {'tg-x'}
+    assert {listener.oid for listener in chat.listeners} == {'tg-x'}
 
 
 @pytest.mark.asyncio
@@ -265,7 +269,7 @@ async def test_mongo_get_all_chat_listeners():
 
     listeners = await repo.get_all_chat_listeners('c1')
 
-    assert {l.oid for l in listeners} == {'tg-1', 'tg-2'}
+    assert {listener.oid for listener in listeners} == {'tg-1', 'tg-2'}
 
 
 # --- MongoDBMessagesRepository (mocked Motor) -----------------------------

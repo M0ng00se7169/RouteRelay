@@ -4,12 +4,13 @@ from dataclasses import dataclass
 
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.metrics import (
-	kafka_messages_sent_total,
-	outbox_pending,
-	outbox_published_total,
-	outbox_publish_errors_total,
+    kafka_messages_sent_total,
+    outbox_pending,
+    outbox_publish_errors_total,
+    outbox_published_total,
 )
 from infrastructure.outbox.base import BaseOutboxRepository
+
 from settings.config import Config
 
 

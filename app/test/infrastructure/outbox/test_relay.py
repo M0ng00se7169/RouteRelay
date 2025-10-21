@@ -1,13 +1,16 @@
-from datetime import datetime, timezone
+from datetime import (
+    datetime,
+    timezone,
+)
 from uuid import uuid4
 
 import pytest
-from prometheus_client import REGISTRY
-
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import OutboxRow
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.relay import OutboxRelay
+from prometheus_client import REGISTRY
+
 
 METRIC_NAMES = (
 	'outbox_published_total',

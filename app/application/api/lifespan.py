@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.relay import OutboxRelay
+
 from logic.init import init_container
 
 

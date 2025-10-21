@@ -1,4 +1,7 @@
-from prometheus_client import Counter, Gauge
+from prometheus_client import (
+    Counter,
+    Gauge,
+)
 
 
 # Outbox relay metrics.

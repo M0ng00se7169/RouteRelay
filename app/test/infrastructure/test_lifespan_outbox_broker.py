@@ -5,8 +5,15 @@ from unittest.mock import (
     MagicMock,
 )
 
-import pytest
 from fastapi import FastAPI
+
+import pytest
+from infrastructure.message_brokers.base import BaseMessageBroker
+from infrastructure.message_brokers.kafka import KafkaMessageBroker
+from infrastructure.outbox.mapper import resolve_topic
+from infrastructure.outbox.mongo import MongoOutboxRepository
+from infrastructure.outbox.relay import OutboxRelay
+from infrastructure.outbox.session import MongoSessionProvider
 
 from application.api.lifespan import (
     close_message_broker,
@@ -20,12 +27,6 @@ from domain.events.messages import (
     NewMessageReceivedEvent,
     NewMessageReceivedFromBrokerEvent,
 )
-from infrastructure.message_brokers.base import BaseMessageBroker
-from infrastructure.message_brokers.kafka import KafkaMessageBroker
-from infrastructure.outbox.mapper import resolve_topic
-from infrastructure.outbox.mongo import MongoOutboxRepository
-from infrastructure.outbox.relay import OutboxRelay
-from infrastructure.outbox.session import MongoSessionProvider
 from logic.events.messages import (
     ChatDeletedEventHandler,
     NewChatCreatedEventHandler,
@@ -33,7 +34,6 @@ from logic.events.messages import (
     NewMessageReceivedFromBrokerEventHandler,
 )
 from logic.init import init_container
-from logic.mediator.base import EventMediator
 
 
 class FakeContainer:
@@ -471,7 +471,7 @@ async def test_new_message_from_broker_handler():
 
 	await handler.handle(event)
 
-	manager.send_all.assert_awaited_once_with(key='c1', bytes_='hi'.encode())
+	manager.send_all.assert_awaited_once_with(key='c1', bytes_=b'hi')
 
 
 # --- MongoSessionProvider --------------------------------------------------

@@ -6,6 +6,13 @@ from typing import (
     Sequence,
 )
 
+from infrastructure.outbox.base import BaseOutboxRepository
+from infrastructure.outbox.session import SessionProvider
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
+
 from domain.entities.messages import (
     Chat,
     ChatListener,
@@ -14,13 +21,6 @@ from domain.entities.messages import (
 from domain.values.messages import (
     Text,
     Title,
-)
-from domain.events.base import BaseEvent
-from infrastructure.outbox.base import BaseOutboxRepository
-from infrastructure.outbox.session import SessionProvider
-from infrastructure.repositories.messages.base import (
-    BaseChatsRepository,
-    BaseMessagesRepository,
 )
 from logic.exceptions.messages import (
     ChatNotFoundException,

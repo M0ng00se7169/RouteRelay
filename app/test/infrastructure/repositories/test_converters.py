@@ -1,20 +1,20 @@
 from datetime import datetime
 
-from domain.entities.messages import (
-    Chat,
-    ChatListener,
-    Message,
-)
-from domain.values.messages import (
-    Text,
-    Title,
-)
 from infrastructure.repositories.messages.converters import (
     convert_chat_document_to_entity,
     convert_chat_entity_to_document,
     convert_chat_listener_document_to_entity,
     convert_message_document_to_entity,
     convert_message_entity_to_document,
+)
+
+from domain.entities.messages import (
+    Chat,
+    Message,
+)
+from domain.values.messages import (
+    Text,
+    Title,
 )
 
 
@@ -53,7 +53,7 @@ def test_chat_document_to_entity_with_listeners():
 
     assert chat.oid == 'c1'
     assert chat.title.as_generic_type() == 'room'
-    assert {l.oid for l in chat.listeners} == {'tg-1', 'tg-2'}
+    assert {listener.oid for listener in chat.listeners} == {'tg-1', 'tg-2'}
 
 
 def test_chat_document_to_entity_no_listeners_key():

@@ -1,9 +1,9 @@
 from domain.events.base import BaseEvent
 from domain.events.messages import (
-	ChatDeletedEvent,
-	ListenerAddedEvent,
-	NewChatCreatedEvent,
-	NewMessageReceivedEvent,
+    ChatDeletedEvent,
+    ListenerAddedEvent,
+    NewChatCreatedEvent,
+    NewMessageReceivedEvent,
 )
 from settings.config import Config
 

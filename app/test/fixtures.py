@@ -5,23 +5,26 @@ from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.relay import OutboxRelay
 from infrastructure.outbox.session import SessionProvider
-from infrastructure.repositories.messages.base import BaseChatsRepository
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
 from infrastructure.repositories.messages.memory import (
     MemoryChatRepository,
     MemoryMessagesRepository,
 )
-from infrastructure.repositories.messages.base import BaseMessagesRepository
+from punq import (
+    Container,
+    Scope,
+)
+
 from logic.init import (
-	build_mediator,
-	init_container,
+    build_mediator,
+    init_container,
 )
 from logic.mediator.base import (
-	EventMediator,
-	Mediator,
-)
-from punq import (
-	Container,
-	Scope,
+    EventMediator,
+    Mediator,
 )
 from settings.config import Config
 

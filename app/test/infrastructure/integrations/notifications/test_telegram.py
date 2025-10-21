@@ -1,7 +1,10 @@
-import pytest
-from httpx import AsyncClient, Response
 from unittest.mock import AsyncMock
 
+import pytest
+from httpx import (
+    AsyncClient,
+    Response,
+)
 from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
 from infrastructure.integrations.notifications.clients.telegram import TelegramNotificationClient
 from infrastructure.integrations.notifications.dtos import Notification

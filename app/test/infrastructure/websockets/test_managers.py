@@ -1,6 +1,6 @@
-import pytest
 from unittest.mock import AsyncMock
 
+import pytest
 from infrastructure.websockets.managers import (
     BaseConnectionManager,
     ConnectionManager,

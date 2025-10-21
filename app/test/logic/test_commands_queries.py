@@ -1,25 +1,19 @@
-import pytest
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-from domain.entities.messages import (
-    Chat,
-    ChatListener,
-    Message,
-)
-from domain.values.messages import (
-    Text,
-    Title,
-)
+import pytest
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.session import SessionProvider
-from infrastructure.repositories.filters.messages import (
-    GetAllChatsFilters,
-    GetMessagesFilters,
-)
+from infrastructure.repositories.filters.messages import GetMessagesFilters
 from infrastructure.repositories.messages.memory import (
     MemoryChatRepository,
     MemoryMessagesRepository,
 )
+
+from domain.entities.messages import (
+    Chat,
+    ChatListener,
+)
+from domain.values.messages import Title
 from logic.commands.messages import (
     AddTelegramListenerCommand,
     AddTelegramListenerCommandHandler,
@@ -229,7 +223,7 @@ async def test_get_all_chats_listeners_query():
 
     listeners = await handler.handle(GetAllChatsListenersQuery(chat_oid=chat.oid))
 
-    assert {l.oid for l in listeners} == {'tg-9'}
+    assert {listener.oid for listener in listeners} == {'tg-9'}
 
 
 @pytest.mark.asyncio
