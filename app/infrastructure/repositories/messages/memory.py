@@ -66,6 +66,24 @@ class MemoryChatRepository(BaseChatsRepository):
             return []
         return list(chat.listeners)
 
+    async def find_chats_by_user_id(self, user_id: str) -> list[Chat]:
+        return [chat for chat in self._saved_chats if chat.user_id == user_id]
+
+    async def get_chat_by_title(self, title: str) -> Chat | None:
+        try:
+            return next(
+                chat for chat in self._saved_chats if chat.title.as_generic_type() == title
+            )
+        except StopIteration:
+            return None
+
+    async def bulk_delete_chats(self, chat_oids: list[str]) -> int:
+        initial_count = len(self._saved_chats)
+        self._saved_chats = [
+            chat for chat in self._saved_chats if chat.oid not in chat_oids
+        ]
+        return initial_count - len(self._saved_chats)
+
 
 @dataclass
 class MemoryMessagesRepository(BaseMessagesRepository):
