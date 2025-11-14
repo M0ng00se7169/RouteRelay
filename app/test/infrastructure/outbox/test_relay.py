@@ -9,6 +9,7 @@ from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import OutboxRow
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.relay import OutboxRelay
+from infrastructure.resilience import CircuitBreaker
 from prometheus_client import REGISTRY
 
 
@@ -79,12 +80,17 @@ class FakeBroker(BaseMessageBroker):
 		...
 
 
-def _build_relay(repo: MemoryOutboxRepository, broker: FakeBroker) -> OutboxRelay:
+def _build_relay(
+	repo: MemoryOutboxRepository,
+	broker: FakeBroker,
+	circuit_breaker: CircuitBreaker | None = None,
+) -> OutboxRelay:
 	return OutboxRelay(
 		outbox_repository=repo,
 		message_broker=broker,
 		poll_interval=0.0,
 		batch_size=10,
+		circuit_breaker=circuit_breaker,
 	)
 
 
@@ -219,6 +225,152 @@ async def test_relay_keeps_rows_unsent_on_broker_failure(metric_baselines):
 		_kafka_sent_value('chat-events')
 		- metric_baselines['kafka_messages_sent_total']['chat-events']
 	) == 0
+
+
+# --- kafka circuit breaker (O-2) ---------------------------------------------
+
+
+def _rejected(name: str) -> float:
+	value = REGISTRY.get_sample_value('circuit_breaker_rejected_total', {'name': name})
+	return value if value is not None else 0.0
+
+
+def _state_gauge(name: str) -> float:
+	value = REGISTRY.get_sample_value('circuit_breaker_state', {'name': name})
+	return value if value is not None else 0.0
+
+
+@pytest.mark.asyncio
+async def test_relay_trips_breaker_after_consecutive_failures():
+	# The batch aborts on the FIRST failure, so each tick contributes exactly
+	# one failure to the breaker (the remaining rows wait for the next tick).
+	repo = MemoryOutboxRepository()
+	repo._outbox.extend([_make_row() for _ in range(4)])
+	broker = FakeBroker(fail=True)
+	relay = _build_relay(
+     repo, broker, circuit_breaker=CircuitBreaker(
+      name='relay-test-trip', failure_threshold=2, recovery_time=60,
+     ),
+ )
+
+	await relay._tick()  # row 1 fails -> failure 1 -> batch aborts
+	assert _state_gauge('relay-test-trip') == 0.0
+	await relay._tick()  # first unsent row fails again -> failure 2 -> open
+
+	assert broker.sent == []
+	assert _state_gauge('relay-test-trip') == 1.0
+
+
+@pytest.mark.asyncio
+async def test_relay_skips_batch_fails_fast_while_breaker_open():
+	repo = MemoryOutboxRepository()
+	repo._outbox.extend([_make_row() for _ in range(3)])
+	broker = FakeBroker()  # Kafka actually healthy — breaker forced open
+	breaker = CircuitBreaker(name='relay-test-skip', failure_threshold=5, recovery_time=60)
+	breaker._open()
+	rejected_before = _rejected('relay-test-skip')
+	hist_before = _hist_value('outbox_publish_duration_seconds', {'topic': 'chat-events'}, sample='_count')
+	relay = _build_relay(repo, broker, circuit_breaker=breaker)
+
+	await relay._tick()
+
+	# Fail fast: no doomed send attempted, rows stay unsent for a later tick.
+	assert broker.sent == []
+	remaining = await repo.get_unsent(10)
+	assert len(remaining) == 3
+	assert _rejected('relay-test-skip') - rejected_before == 1
+	# A rejection is not an attempt: no new histogram sample (delta, not
+	# absolute — earlier tests in this module share the global registry).
+	assert (
+		_hist_value('outbox_publish_duration_seconds', {'topic': 'chat-events'}, sample='_count')
+		- hist_before
+	) == 0
+
+
+@pytest.mark.asyncio
+async def test_relay_trips_mid_batch_and_skips_next_tick_without_histogram_sample():
+	# Mid-batch trip, modeled the only way it happens in production: row 1 is
+	# sent, then row 2's send FAILS hard — the failure trips the breaker
+	# (threshold=1) and the batch aborts with row 1 marked sent. The NEXT tick
+	# hits the open-state pre-check: rows skip without an attempt (no doomed
+	# producer timeout, no histogram sample).
+	#
+	# NB: a trip raised *during a successful* operation would be wiped by
+	# call()'s success-reset — an externally-set open state cannot survive a
+	# success. That is fine here: the relay's 'kafka' breaker is private and
+	# only ever trips through its own failed sends.
+	repo = MemoryOutboxRepository()
+	repo._outbox.extend([_make_row() for _ in range(3)])
+
+	class FailOnSecondSendBroker(FakeBroker):
+		async def send_message(self, key: bytes, topic: str, value: bytes) -> None:
+			if len(self.sent) >= 1:  # row 2: Kafka goes down
+				self.breaker._open()
+				raise RuntimeError('kafka down mid-batch')
+			await super().send_message(key, topic, value)
+
+	breaker = CircuitBreaker(name='relay-test-race', failure_threshold=1, recovery_time=60)
+	broker = FailOnSecondSendBroker()
+	broker.breaker = breaker
+	relay = _build_relay(repo, broker, circuit_breaker=breaker)
+
+	# Tick 1: row 1 sent, row 2 fails -> trip -> batch aborts.
+	await relay._tick()
+	assert len(broker.sent) == 1
+	assert _state_gauge('relay-test-race') == 1.0
+
+	# Tick 2: pre-check skips without an attempt — fail fast.
+	rejected_before = _rejected('relay-test-race')
+	hist_before = _hist_value('outbox_publish_duration_seconds', {'topic': 'chat-events'}, sample='_count')
+	await relay._tick()
+
+	assert len(broker.sent) == 1  # no new sends
+	assert _rejected('relay-test-race') - rejected_before == 1
+	assert (
+		_hist_value('outbox_publish_duration_seconds', {'topic': 'chat-events'}, sample='_count')
+		- hist_before
+	) == 0  # a rejection is not an attempt
+	remaining = await repo.get_unsent(10)
+	assert len(remaining) == 2
+
+
+@pytest.mark.asyncio
+async def test_relay_resumes_publishing_after_breaker_recovery():
+	repo = MemoryOutboxRepository()
+	row = _make_row()
+	repo._outbox.append(row)
+	broker = FakeBroker()
+	breaker = CircuitBreaker(name='relay-test-recover', failure_threshold=1, recovery_time=60)
+	relay = _build_relay(repo, broker, circuit_breaker=breaker)
+
+	breaker._open()
+	await relay._tick()
+	assert broker.sent == []  # skipped while open
+
+	# Simulate the recovery window elapsing -> half-open probe is allowed and
+	# succeeds -> breaker closes -> publishing resumes.
+	from time import monotonic
+	breaker._opened_at = monotonic() - breaker.recovery_time - 1
+	await relay._tick()
+
+	assert len(broker.sent) == 1
+	assert await repo.get_unsent(10) == []
+	assert _state_gauge('relay-test-recover') == 0.0
+
+
+@pytest.mark.asyncio
+async def test_relay_without_breaker_behaves_as_before():
+	# Back-compat guard: circuit_breaker=None (tests, dummy container) must
+	# keep the legacy single-send-per-row path without breaker interactions.
+	repo = MemoryOutboxRepository()
+	repo._outbox.extend([_make_row(), _make_row()])
+	broker = FakeBroker()
+	relay = _build_relay(repo, broker, circuit_breaker=None)
+
+	await relay._tick()
+
+	assert len(broker.sent) == 2
+	assert await repo.get_unsent(10) == []
 
 
 @pytest.mark.asyncio
