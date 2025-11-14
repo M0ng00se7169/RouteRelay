@@ -24,6 +24,11 @@ from infrastructure.repositories.messages.mongo import (
     MongoDBChatsRepository,
     MongoDBMessagesRepository,
 )
+from infrastructure.resilience import (
+    CircuitBreaker,
+    CircuitBreakerChatsRepository,
+    CircuitBreakerMessagesRepository,
+)
 from infrastructure.websockets.managers import (
     BaseConnectionManager,
     ConnectionManager,
@@ -91,18 +96,39 @@ def _init_container() -> Container:
     container.register(AsyncIOMotorClient, factory=create_mongodb_client, scope=Scope.singleton)
     client = container.resolve(AsyncIOMotorClient)
 
+    # Mongo calls are guarded by a circuit breaker (infrastructure/resilience.py):
+    # while Mongo is down the breaker opens after N consecutive failures and the
+    # API fails fast with 503 instead of hanging on serverSelectionTimeoutMS.
+    # One shared breaker — both collections hit the same Mongo server. Only the
+    # Mongo repos are wrapped; test containers override these registrations with
+    # in-memory repos and never see the proxies.
+    def create_mongo_circuit_breaker() -> CircuitBreaker:
+        return CircuitBreaker(
+            name='mongo',
+            failure_threshold=config.circuit_breaker_failure_threshold,
+            recovery_time=config.circuit_breaker_recovery_time,
+        )
+
+    container.register(CircuitBreaker, factory=create_mongo_circuit_breaker, scope=Scope.singleton)
+
     def init_chats_mongodb_repository() -> BaseChatsRepository:
-        return MongoDBChatsRepository(
-            mongo_db_client=client,
-            mongo_db_db_name=config.mongodb_chat_database,
-            mongo_db_collection_name=config.mongodb_chat_collection,
+        return CircuitBreakerChatsRepository(
+            inner=MongoDBChatsRepository(
+                mongo_db_client=client,
+                mongo_db_db_name=config.mongodb_chat_database,
+                mongo_db_collection_name=config.mongodb_chat_collection,
+            ),
+            breaker=container.resolve(CircuitBreaker),
         )
 
     def init_messages_mongodb_repository() -> BaseMessagesRepository:
-        return MongoDBMessagesRepository(
-            mongo_db_client=client,
-            mongo_db_db_name=config.mongodb_chat_database,
-            mongo_db_collection_name=config.mongodb_messages_collection,
+        return CircuitBreakerMessagesRepository(
+            inner=MongoDBMessagesRepository(
+                mongo_db_client=client,
+                mongo_db_db_name=config.mongodb_chat_database,
+                mongo_db_collection_name=config.mongodb_messages_collection,
+            ),
+            breaker=container.resolve(CircuitBreaker),
         )
 
     container.register(BaseChatsRepository, factory=init_chats_mongodb_repository, scope=Scope.singleton)
