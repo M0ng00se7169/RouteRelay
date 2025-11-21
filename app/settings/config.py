@@ -17,6 +17,16 @@ class Config(BaseSettings):
     chat_deleted_topic: str = Field(default='chat-deleted-topic')
     new_listener_added_topic: str = Field(default='listener-added-topic')
 
+    # Telegram notifications (see docs/adr/issue4.md). Notifications are
+    # disabled when the bot token is empty.
+    telegram_bot_token: str = Field(default='', alias='TELEGRAM_BOT_TOKEN')
+    telegram_chat_id: str = Field(default='', alias='TELEGRAM_CHAT_ID')
+    telegram_api_url: str = Field(default='https://api.telegram.org', alias='TELEGRAM_API_URL')
+
     # Prometheus server port (the Prometheus container, NOT the app's /metrics endpoint,
     # which is served on the API port).
     prometheus_port: int = Field(default=9090, alias='PROMETHEUS_PORT')
+
+    # Deployed build version, reported on the application_info metric
+    # (ADR-0006, Chunk 6.2). Override via env (e.g. the git tag) per deployment.
+    app_version: str = Field(default='0.1.0', alias='APP_VERSION')

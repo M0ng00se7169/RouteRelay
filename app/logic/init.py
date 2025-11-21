@@ -1,5 +1,8 @@
 from functools import lru_cache
 
+from httpx import AsyncClient
+from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
+from infrastructure.integrations.notifications.clients.telegram import TelegramNotificationClient
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.message_brokers.kafka import KafkaMessageBroker
 from infrastructure.outbox.base import BaseOutboxRepository
@@ -139,6 +142,24 @@ def _init_container() -> Container:
 
     container.register(OutboxRelay, factory=create_outbox_relay, scope=Scope.singleton)
 
+    # Telegram notifications (see docs/adr/issue4.md): the client is only wired
+    # when a bot token is configured. When it is absent, BaseNotificationClient
+    # stays unregistered and ListenerAddedEventHandler skips notifications.
+    if config.telegram_bot_token:
+        def init_telegram_notification_client() -> TelegramNotificationClient:
+            return TelegramNotificationClient(
+                bot_token=config.telegram_bot_token,
+                chat_id=config.telegram_chat_id,
+                http_client=AsyncClient(),
+                send_url=config.telegram_api_url,
+            )
+
+        container.register(
+            BaseNotificationClient,
+            factory=init_telegram_notification_client,
+            scope=Scope.singleton,
+        )
+
     # Build + wire the mediator from THIS container. Kept as a reusable function
     # so the test dummy container can rebuild the mediator against its overridden
     # (in-memory) repositories. Command handlers receive this same mediator
@@ -193,6 +214,11 @@ def build_mediator(container: Container, config: Config) -> Mediator:
             session_provider=container.resolve(SessionProvider),
         )
 
+    # NOTE: handlers are registered via factories (deferred), NOT instances:
+    # punq caches instance-registrations in _singletons immediately, which would
+    # defeat init_dummy_container()'s rebuild — the test dummy container overrides
+    # the repositories and re-runs build_mediator, and each factory must resolve
+    # the (overridden) dependencies at that later point in time.
     container.register(CreateChatCommandHandler, factory=init_create_chat_command_handler)
     container.register(CreateMessageCommandHandler, factory=init_create_message_command_handler)
     container.register(DeleteChatCommandHandler, factory=init_delete_chat_command_handler)
@@ -205,6 +231,14 @@ def build_mediator(container: Container, config: Config) -> Mediator:
     create_message_handler = container.resolve(CreateMessageCommandHandler)
     delete_chat_handler = container.resolve(DeleteChatCommandHandler)
     add_telegram_listener_handler = container.resolve(AddTelegramListenerCommandHandler)
+
+    # Kafka delivery happens via the outbox relay, so these handlers only keep
+    # in-process side effects; broker_topic is carried for the EventHandler
+    # contract (see logic/events/messages.py).
+    notification_client: BaseNotificationClient | None = None
+    if config.telegram_bot_token:
+        notification_client = container.resolve(BaseNotificationClient)
+
     new_chat_created_event_handler = NewChatCreatedEventHandler(
         message_broker=container.resolve(BaseMessageBroker),
         connection_manager=container.resolve(BaseConnectionManager),
@@ -218,7 +252,6 @@ def build_mediator(container: Container, config: Config) -> Mediator:
     new_message_received_from_broker_event_handler = NewMessageReceivedFromBrokerEventHandler(
         message_broker=container.resolve(BaseMessageBroker),
         connection_manager=container.resolve(BaseConnectionManager),
-        broker_topic=config.new_message_received_topic,
     )
     chat_deleted_event_handler = ChatDeletedEventHandler(
         message_broker=container.resolve(BaseMessageBroker),
@@ -229,6 +262,7 @@ def build_mediator(container: Container, config: Config) -> Mediator:
         message_broker=container.resolve(BaseMessageBroker),
         connection_manager=container.resolve(BaseConnectionManager),
         broker_topic=config.new_listener_added_topic,
+        notification_client=notification_client,
     )
 
     mediator.register_event(
