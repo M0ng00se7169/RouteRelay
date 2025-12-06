@@ -122,8 +122,8 @@ Key wiring facts:
   pre-commit hook) — `poetry run ruff check` now works as documented in `.pi/APPEND_SYSTEM.md`.
   Side effect: poetry reconciled the venv to `poetry.lock` (several locally-newer packages
   downgraded); full suite re-verified after. Ruff clean on all session-touched files (caught one
-  unused import, fixed). Remaining stray: root `uv.lock` (`requires-python >=3.14`) looks
-  abandoned — candidates for deletion after user review.
+  unused import, fixed). Stray root `uv.lock` (`requires-python >=3.14`, unreferenced by any
+  tooling) deleted 2026-09-25 after user review.
 - **2026-09-25 — Alert on consumer reconnects.** New `KafkaConsumerReconnecting` (warning) in
   `docker_compose/prometheus-alerts.yml`: `increase(kafka_consumer_reconnects_total[15m]) > 0` —
   recency signal for broker stream death; reconnects self-heal, consumer death stays
