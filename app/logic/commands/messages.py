@@ -2,10 +2,15 @@ from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import (
     AsyncIterator,
+    Awaitable,
+    Callable,
     Optional,
     Sequence,
+    TypeVar,
 )
 
+from infrastructure.metrics import safe_inc
+from infrastructure.metrics import db_operation_errors_total
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.messages.base import (
@@ -27,6 +32,29 @@ from logic.exceptions.messages import (
     ChatWithThatTitleAlreadyExistsException,
 )
 from logic.mediator.base import EventMediator
+
+_T = TypeVar('_T')
+
+
+async def _count_db_errors(operation: str, collection: str, call: Callable[[], Awaitable[_T]]) -> _T:
+    """Await a persistence call, counting its exceptions on
+    ``db_operation_errors_total`` (ADR-0006, Chunk 5.2) before re-raising.
+
+    Only unexpected persistence failures (Mongo down, timeouts, ...) land here.
+    Domain errors (``ChatNotFoundException``, duplicate title, ...) are raised
+    by the handlers themselves, outside the wrapped calls, and stay uncounted.
+    Metrics are non-fatal (D5): the counter update goes through ``safe_inc``.
+    """
+    try:
+        return await call()
+    except Exception as e:
+        safe_inc(
+            db_operation_errors_total,
+            operation=f'{operation}.{e.__class__.__name__}',
+            collection=collection,
+            exception=e.__class__.__name__,
+        )
+        raise
 
 
 @asynccontextmanager
@@ -60,8 +88,14 @@ class CreateChatCommandHandler:
         new_chat = Chat.create_chat(title=Title(command.title))
         events = new_chat.pull_events()
         async with _maybe_transaction(self.session_provider) as session:
-            await self.chats_repository.add_chat(new_chat, session=session)
-            await self.outbox_repository.save_events(events, session=session)
+            await _count_db_errors(
+                'insert', 'chats',
+                lambda: self.chats_repository.add_chat(new_chat, session=session),
+            )
+            await _count_db_errors(
+                'insert', 'outbox',
+                lambda: self.outbox_repository.save_events(events, session=session),
+            )
         await self._mediator.publish(events)
         return new_chat
 
@@ -106,8 +140,14 @@ class CreateMessageCommandHandler:
         chat.add_message(message)
         events = chat.pull_events()
         async with _maybe_transaction(self.session_provider) as session:
-            await self.messages_repository.add_message(message, session=session)
-            await self.outbox_repository.save_events(events, session=session)
+            await _count_db_errors(
+                'insert', 'messages',
+                lambda: self.messages_repository.add_message(message, session=session),
+            )
+            await _count_db_errors(
+                'insert', 'outbox',
+                lambda: self.outbox_repository.save_events(events, session=session),
+            )
         await self._mediator.publish(events)
         return message
 
@@ -133,8 +173,14 @@ class DeleteChatCommandHandler:
         chat.delete()
         events = chat.pull_events()
         async with _maybe_transaction(self.session_provider) as session:
-            await self.chats_repository.delete_chat_by_oid(command.chat_oid, session=session)
-            await self.outbox_repository.save_events(events, session=session)
+            await _count_db_errors(
+                'delete', 'chats',
+                lambda: self.chats_repository.delete_chat_by_oid(command.chat_oid, session=session),
+            )
+            await _count_db_errors(
+                'insert', 'outbox',
+                lambda: self.outbox_repository.save_events(events, session=session),
+            )
         await self._mediator.publish(events)
 
 
@@ -190,12 +236,18 @@ class AddTelegramListenerCommandHandler:
         chat.register_telegram_listener(telegram_chat_id=command.telegram_chat_id)
         events = chat.pull_events()
         async with _maybe_transaction(self.session_provider) as session:
-            await self.chats_repository.add_telegram_listener(
-                chat_oid=command.chat_oid,
-                telegram_chat_id=command.telegram_chat_id,
-                session=session,
+            await _count_db_errors(
+                'update', 'chats',
+                lambda: self.chats_repository.add_telegram_listener(
+                    chat_oid=command.chat_oid,
+                    telegram_chat_id=command.telegram_chat_id,
+                    session=session,
+                ),
             )
-            await self.outbox_repository.save_events(events, session=session)
+            await _count_db_errors(
+                'insert', 'outbox',
+                lambda: self.outbox_repository.save_events(events, session=session),
+            )
         await self._mediator.publish(events)
 
         return ChatListener(oid=command.telegram_chat_id)

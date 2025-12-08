@@ -1,6 +1,8 @@
 from dataclasses import dataclass
 from typing import Iterable
 
+from infrastructure.metrics import db_operation_errors_total
+from infrastructure.metrics import safe_inc
 from infrastructure.repositories.filters.messages import (
     GetAllChatsFilters,
     GetMessagesFilters,
@@ -20,6 +22,29 @@ from logic.queries.base import (
     BaseQuery,
     BaseQueryHandler,
 )
+
+
+def _count_db_errors(operation: str, collection: str, call):
+    """Await a persistence call, counting its exceptions on
+    ``db_operation_errors_total`` (ADR-0006, Chunk 5.2) before re-raising.
+
+    Domain errors raised by the handler around the call (e.g.
+    ``ChatNotFoundException``) do not pass through here and stay uncounted.
+    """
+
+    async def wrapped():
+        try:
+            return await call()
+        except Exception as e:
+            safe_inc(
+                db_operation_errors_total,
+                operation=f'{operation}.{e.__class__.__name__}',
+                collection=collection,
+                exception=e.__class__.__name__,
+            )
+            raise
+
+    return wrapped()
 
 
 @dataclass(frozen=True)
@@ -49,7 +74,10 @@ class GetChatDetailQueryHandler(BaseQueryHandler):
     messages_repository: BaseMessagesRepository
 
     async def handle(self, query: GetChatDetailQuery) -> Chat:
-        chat = await self.chats_repository.get_chat_by_oid(oid=query.chat_oid)
+        chat = await _count_db_errors(
+            'query', 'chats',
+            lambda: self.chats_repository.get_chat_by_oid(oid=query.chat_oid),
+        )
 
         if not chat:
             raise ChatNotFoundException(chat_oid=query.chat_oid)
@@ -62,9 +90,12 @@ class GetMessagesQueryHandler(BaseQueryHandler):
     messages_repository: BaseMessagesRepository
 
     async def handle(self, query: GetMessagesQuery) -> Iterable[Message]:
-        return await self.messages_repository.get_messages(
-            chat_oid=query.chat_oid,
-            filters=query.filters,
+        return await _count_db_errors(
+            'query', 'messages',
+            lambda: self.messages_repository.get_messages(
+                chat_oid=query.chat_oid,
+                filters=query.filters,
+            ),
         )
 
 
@@ -73,7 +104,10 @@ class GetAllChatsQueryHandler(BaseQueryHandler[GetAllChatsQuery, Iterable[Chat]]
     chats_repository: BaseChatsRepository
 
     async def handle(self, query: GetAllChatsQuery) -> Iterable[Chat]:  # type: ignore
-        return await self.chats_repository.get_all_chats(filters=query.filters)
+        return await _count_db_errors(
+            'query', 'chats',
+            lambda: self.chats_repository.get_all_chats(filters=query.filters),
+        )
 
 
 @dataclass(frozen=True)
@@ -81,9 +115,15 @@ class GetAllChatsListenersQueryHandler(BaseQueryHandler[GetAllChatsListenersQuer
     chats_repository: BaseChatsRepository
 
     async def handle(self, query: GetAllChatsListenersQuery) -> Iterable[ChatListener]:
-        chat = await self.chats_repository.get_chat_by_oid(oid=query.chat_oid)
+        chat = await _count_db_errors(
+            'query', 'chats',
+            lambda: self.chats_repository.get_chat_by_oid(oid=query.chat_oid),
+        )
 
         if not chat:
             raise ChatNotFoundException(chat_oid=query.chat_oid)
 
-        return await self.chats_repository.get_all_chat_listeners(chat_oid=query.chat_oid)
+        return await _count_db_errors(
+            'query', 'chats',
+            lambda: self.chats_repository.get_all_chat_listeners(chat_oid=query.chat_oid),
+        )
