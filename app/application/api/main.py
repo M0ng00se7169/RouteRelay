@@ -18,6 +18,7 @@ from application.api.lifespan import (
     stop_kafka_consumer,
     stop_relay,
 )
+from application.api.auth.handlers import router as auth_router
 from application.api.messages.handlers import router as message_router
 from application.api.messages.websockets.messages import router as message_ws_router
 from settings.config import Config
@@ -42,6 +43,7 @@ def create_app() -> FastAPI:
 		debug=True,
 		lifespan=lifespan,
 	)
+	app.include_router(auth_router, prefix='/auth')
 	app.include_router(message_router, prefix='/chat')
 	app.include_router(message_ws_router, prefix='/chats')
 
