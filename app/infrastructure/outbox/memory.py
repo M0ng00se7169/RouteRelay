@@ -39,6 +39,9 @@ class MemoryOutboxRepository(BaseOutboxRepository):
 	async def get_unsent(self, limit: int) -> list[OutboxRow]:
 		return [row for row in self._outbox if not row.sent][:limit]
 
+	async def count_unsent(self) -> int:
+		return sum(1 for row in self._outbox if not row.sent)
+
 	async def mark_as_sent(self, ids: list[str]) -> None:
 		sent_at = datetime.now(timezone.utc)
 		for row in self._outbox:

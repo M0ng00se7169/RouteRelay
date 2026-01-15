@@ -42,6 +42,11 @@ class MongoOutboxRepository(BaseOutboxRepository):
 		cursor = self.collection.find({'sent': False}).limit(limit)
 		return [self._to_row(doc) async for doc in cursor]
 
+	async def count_unsent(self) -> int:
+		# Uses the `sent` field — back it with a partial index on {'sent': False}
+		# once the outbox grows large (ADR-0006, Section 7).
+		return await self.collection.count_documents({'sent': False})
+
 	async def mark_as_sent(self, ids: list[str]) -> None:
 		await self.collection.update_many(
 			{'_id': {'$in': ids}},
