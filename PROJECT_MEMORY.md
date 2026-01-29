@@ -80,6 +80,15 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — ADR-0007: Alertmanager wiring plan.** `docs/adr/0007-alertmanager-wiring.md`
+  (Proposed): closes the follow-up deferred since ADR-0006 Chunk 7.2. Four chunks — (1) run
+  Alertmanager in the stack (compose file, `alerting:` section in prometheus.yml, make targets,
+  `ALERTMANAGER_PORT=9093` in both env files); (2) routing tree: critical pages immediately,
+  warnings grouped per subsystem, **inhibition pairs from the drill** (CircuitOpen mutes
+  RelayFailing; ConsumerDown mutes Reconnecting); (3) receiver transport — **recommendation:
+  Telegram via webhook relay (open decision, ask before provisioning)**; (4) hygiene — fill the
+  five missing `runbook_url` annotations + document silences (`amtool silences add` for drills).
+  Cross-referenced from architecture.md/README deferral notes. No code changes yet.
 - **2026-09-25 — Grafana breaker panels.** `kafka-chat-overview` gained a new row after the outbox
   errors panels: a `stat` panel (breaker state per `name`, mapped 0=closed / 1=open-or-half-open,
   red threshold at open) and a timeseries of `sum(increase(circuit_breaker_rejected_total[15m]))
