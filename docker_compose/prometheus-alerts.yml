@@ -30,6 +30,8 @@
 #   the doomed sends. Recovery is automatic via the half-open probe
 #   (CIRCUIT_BREAKER_RECOVERY_TIME, default 30s), so like the reconnect alert
 #   this tolerates a brief outage and clears ~15m after the last rejection.
+#   Response procedure (built from the 2026-09-25 live fire drill): see the
+#   alert's runbook_url — docs/runbooks/kafka-outage.md.
 groups:
   - name: kafka-chat
     rules:
@@ -56,6 +58,7 @@ groups:
           severity: warning
         annotations:
           summary: 'Kafka circuit breaker open — relay sends skipped ({{ $value }} in 15m)'
+          runbook_url: 'docs/runbooks/kafka-outage.md'
           description: 'The relay''s ''kafka'' circuit breaker is rejecting sends after repeated Kafka failures — the outbox batch is skipped while it stays open, so OutboxRelayFailing goes quiet. Rows stay unsent and drain once the half-open probe succeeds (recovery window CIRCUIT_BREAKER_RECOVERY_TIME, default 30s). If this repeats, check Kafka health (KafkaConsumerReconnecting/Down cover the consumer side).'
 
       - alert: KafkaConsumerDown
