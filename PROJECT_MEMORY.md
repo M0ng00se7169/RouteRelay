@@ -80,6 +80,12 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — Kafka outage runbook.** `docs/runbooks/kafka-outage.md`: triage + recovery built
+  from the drill's observed timeline (detection latency ≈ aiokafka 40s request timeout × threshold
+  5 ≈ 3.5 min; errors freeze once the breaker opens — `OutboxRelayFailing` quiet while
+  `OutboxRelayCircuitOpen` fires; recovery needs no app restart; alert clears ~15m after the last
+  rejection). Wired via `runbook_url` annotation on the alert (validated with promtool, hot-loaded
+  into the running Prometheus, `health: ok` after reload); linked from the architecture alert table.
 - **2026-09-25 — Producer durability: `acks=all`.** `KafkaMessageBroker` gained an `acks` field
   (default `'all'`, passed to `AIOKafkaProducer`). With sends now awaiting the ack (see the drill
   fix below), the ack requires every in-sync replica instead of aiokafka's default `acks=1`.

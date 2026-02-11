@@ -163,7 +163,7 @@ Prometheus evaluates the rules in `docker_compose/prometheus-alerts.yml`
 |---|---|---|---|
 | `OutboxBacklogGrowing` | `outbox_pending > 200 for 5m` | warning | the relay stops draining the outbox (Kafka outage, dead relay, producers outpacing it) |
 | `OutboxRelayFailing` | `rate(outbox_publish_errors_total[5m]) > 0` | warning | the relay recorded publish errors in the last 5m — rows stay unsent and retry |
-| `OutboxRelayCircuitOpen` | `increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0` | warning | the relay's 'kafka' circuit breaker is rejecting sends — outbox batches are skipped while the breaker stays open (which also quiets `OutboxRelayFailing`); rows drain once the half-open probe succeeds |
+| `OutboxRelayCircuitOpen` | `increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0` | warning | the relay's 'kafka' circuit breaker is rejecting sends — outbox batches are skipped while the breaker stays open (which also quiets `OutboxRelayFailing`); rows drain once the half-open probe succeeds — response: `docs/runbooks/kafka-outage.md` |
 | `KafkaConsumerDown` | `kafka_consumer_up == 0 and up{job='kafka-chat-api'} == 1` | critical | the consumer loop task is dead while the app itself is up — inbound messages stop reaching the fan-out |
 | `KafkaConsumerReconnecting` | `increase(kafka_consumer_reconnects_total[15m]) > 0` | warning | at least one consumer reconnect in the last 15m — the broker stream died or exited cleanly; delivery self-heals via backoff, repeated firing signals Kafka instability |
 | `WSBroadcastFailures` | `rate(ws_broadcast_failures_total[5m]) > 0` | warning | per-socket send failures during fan-out (clients dropping mid-broadcast) |
