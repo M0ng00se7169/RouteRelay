@@ -46,6 +46,9 @@ class FakeContainer:
 	def resolve(self, cls):
 		return self._mapping[cls]
 
+	def register(self, service=None, factory=None, instance=None, scope=None, **kwargs):
+		pass
+
 
 # --- lifespan glue ---------------------------------------------------------
 
@@ -349,6 +352,18 @@ async def test_mongo_outbox_mark_as_sent():
 	collection.update_many.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_mongo_outbox_count_unsent():
+	collection = MagicMock()
+	collection.count_documents = AsyncMock(return_value=7)
+	repo = MongoOutboxRepository(collection=collection, _topic_resolver=MagicMock())
+
+	count = await repo.count_unsent()
+
+	assert count == 7
+	collection.count_documents.assert_awaited_once_with({'sent': False})
+
+
 # --- Relay ----------------------------------------------------------------
 
 
@@ -360,6 +375,7 @@ async def test_relay_tick_publishes_and_marks_sent():
 	]
 	repo = AsyncMock()
 	repo.get_unsent = AsyncMock(return_value=rows)
+	repo.count_unsent = AsyncMock(return_value=0)
 	repo.mark_as_sent = AsyncMock()
 	broker = AsyncMock(spec=BaseMessageBroker)
 	relay = OutboxRelay(outbox_repository=repo, message_broker=broker)
@@ -375,6 +391,7 @@ async def test_relay_tick_publishes_and_marks_sent():
 async def test_relay_tick_no_rows():
 	repo = AsyncMock()
 	repo.get_unsent = AsyncMock(return_value=[])
+	repo.count_unsent = AsyncMock(return_value=0)
 	broker = AsyncMock(spec=BaseMessageBroker)
 	relay = OutboxRelay(outbox_repository=repo, message_broker=broker)
 
@@ -392,6 +409,7 @@ async def test_relay_tick_stops_on_error():
 	]
 	repo = AsyncMock()
 	repo.get_unsent = AsyncMock(return_value=rows)
+	repo.count_unsent = AsyncMock(return_value=2)
 	repo.mark_as_sent = AsyncMock()
 	broker = AsyncMock(spec=BaseMessageBroker)
 	broker.send_message.side_effect = RuntimeError('kafka down')
@@ -408,6 +426,7 @@ async def test_relay_tick_stops_on_error():
 async def test_relay_run_loops_until_cancelled():
 	repo = AsyncMock()
 	repo.get_unsent = AsyncMock(return_value=[])
+	repo.count_unsent = AsyncMock(return_value=0)
 	broker = AsyncMock(spec=BaseMessageBroker)
 	relay = OutboxRelay(outbox_repository=repo, message_broker=broker, poll_interval=0.01)
 

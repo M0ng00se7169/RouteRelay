@@ -50,11 +50,12 @@ def test_converter_roundtrip_chat_deleted():
 
 
 def test_converter_roundtrip_listener_added():
-	event = ListenerAddedEvent(listener_oid='listener-1')
+	event = ListenerAddedEvent(chat_oid='chat-1', listener_oid='listener-1')
 
 	payload = convert_event_to_broker_message(event)
 
 	assert isinstance(payload, bytes)
 	assert payload != b'{}'
 	decoded = orjson.loads(payload)
+	assert decoded['chat_oid'] == 'chat-1'
 	assert decoded['listener_oid'] == 'listener-1'

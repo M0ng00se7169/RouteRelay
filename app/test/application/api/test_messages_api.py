@@ -169,3 +169,19 @@ def test_websocket_connect_to_missing_chat_closes(client: TestClient):
 		payload = ws.receive_json()
 		assert 'error' in payload
 		assert 'not found' in payload['error'].lower()
+
+
+def test_metrics_endpoint_exposes_application_info(client: TestClient):
+	# Chunk 6.2 (ADR-0006): the build-info gauge must be present on /metrics
+	# with the configured version as a label and value 1.
+	from prometheus_client import REGISTRY
+	from settings.config import Config
+
+	version = Config().app_version
+
+	resp = client.get('/metrics')
+	assert resp.status_code == 200
+
+	sample = REGISTRY.get_sample_value('application_info', {'version': version})
+	assert sample == 1.0
+	assert f'application_info{{version="{version}"}} 1.0' in resp.text

@@ -1,3 +1,4 @@
+import asyncio
 from unittest.mock import AsyncMock
 
 from infrastructure.message_brokers.base import BaseMessageBroker
@@ -44,13 +45,40 @@ class _NoopOutboxRelay(OutboxRelay):
 		return None
 
 
+async def _dummy_consumer_iterator():
+	yield {'chat_oid': 'dummy-chat-oid', 'message': 'dummy message'}
+	await asyncio.sleep(1)
+
+
+async def _dummy_start_consuming(topic: str):
+	async for message in _dummy_consumer_iterator():
+		yield message
+
+
+class DummyMessageBroker:
+	async def start(self):
+		pass
+
+	async def close(self):
+		pass
+
+	async def send_message(self, topic: str, key: bytes, value: bytes):
+		pass
+
+	def start_consuming(self, topic: str):
+		return _dummy_start_consuming(topic)
+
+	def stop_consuming(self):
+		pass
+
+
 def init_dummy_container() -> Container:
 	container = init_container()
 	container.register(BaseChatsRepository, MemoryChatRepository, scope=Scope.singleton)
 	container.register(BaseMessagesRepository, MemoryMessagesRepository, scope=Scope.singleton)
 	container.register(
 		BaseMessageBroker,
-		instance=AsyncMock(spec=BaseMessageBroker),
+		instance=DummyMessageBroker(),
 		scope=Scope.singleton,
 	)
 	container.register(BaseOutboxRepository, MemoryOutboxRepository, scope=Scope.singleton)
