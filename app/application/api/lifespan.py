@@ -9,6 +9,7 @@ from infrastructure.metrics import (
     kafka_consumer_errors_total,
     kafka_consumer_events_published_total,
     kafka_consumer_malformed_total,
+    kafka_consumer_reconnects_total,
     kafka_consumer_up,
     kafka_messages_consumed_total,
     safe_inc,
@@ -81,34 +82,65 @@ async def stop_relay(task: asyncio.Task) -> None:
         pass
 
 
-async def _kafka_consumer_loop(broker: BaseMessageBroker, topic: str, mediator) -> None:
-	consumer = broker.start_consuming(topic)
-	async for message in consumer:
-		# Count every received message before parsing (ADR-0006, Chunk 3.1).
-		safe_inc(kafka_messages_consumed_total, topic=topic)
+async def _kafka_consumer_loop(
+	broker: BaseMessageBroker,
+	topic: str,
+	mediator,
+	backoff_initial: float = 1.0,
+	backoff_max: float = 30.0,
+) -> None:
+	# Reconnect wrapper (O-1): the Kafka stream can end in two ways — an
+	# exception (broker restart, network error) or a *clean* iterator exit
+	# (aiokafka ends iteration when the broker closes the stream). Both used to
+	# kill the loop silently; now both trigger a reconnect with exponential
+	# backoff. Only task cancellation propagates (graceful stop path).
+	backoff = backoff_initial
+	while True:
 		try:
-			# Wire contract: the outbox relay serializes NewMessageReceivedEvent
-			# via convert_event_to_broker_message, whose field is `message_text`
-			# (the old `message` key never existed in real payloads — every
-			# message was miscounted as malformed until the smoke test caught it).
-			chat_oid = message.get('chat_oid')
-			message_text = message.get('message_text')
+			consumer = broker.start_consuming(topic)
+			async for message in consumer:
+				# Count every received message before parsing (ADR-0006, Chunk 3.1).
+				safe_inc(kafka_messages_consumed_total, topic=topic)
+				try:
+					# Wire contract: the outbox relay serializes NewMessageReceivedEvent
+					# via convert_event_to_broker_message, whose field is `message_text`
+					# (the old `message` key never existed in real payloads — every
+					# message was miscounted as malformed until the smoke test caught it).
+					chat_oid = message.get('chat_oid')
+					message_text = message.get('message_text')
 
-			if chat_oid and message_text:
-				event = NewMessageReceivedFromBrokerEvent(
-					message=message_text,
-					chat_oid=chat_oid,
-				)
-				# publish() expects an iterable of events.
-				await mediator.publish([event])
-				safe_inc(kafka_consumer_events_published_total, topic=topic)
-			else:
-				# Malformed payload (missing/empty chat_oid or message): has no
-				# reliable identity, so it is counted, not published.
-				safe_inc(kafka_consumer_malformed_total)
+					if chat_oid and message_text:
+						event = NewMessageReceivedFromBrokerEvent(
+							message=message_text,
+							chat_oid=chat_oid,
+						)
+						# publish() expects an iterable of events.
+						await mediator.publish([event])
+						safe_inc(kafka_consumer_events_published_total, topic=topic)
+					else:
+						# Malformed payload (missing/empty chat_oid or message): has no
+						# reliable identity, so it is counted, not published.
+						safe_inc(kafka_consumer_malformed_total)
+				except Exception:
+					logger.exception('Error processing Kafka message')
+					safe_inc(kafka_consumer_errors_total, topic=topic)
+				# Traffic means the connection is healthy: reset the backoff so a
+				# later outage starts again from the initial delay.
+				backoff = backoff_initial
+		except asyncio.CancelledError:
+			# Graceful stop (stop_kafka_consumer) — do not reconnect.
+			raise
 		except Exception:
-			logger.exception('Error processing Kafka message')
-			safe_inc(kafka_consumer_errors_total, topic=topic)
+			logger.exception('Kafka consumer stream died; reconnecting in %.1fs', backoff)
+			safe_inc(kafka_consumer_reconnects_total, topic=topic)
+			await asyncio.sleep(backoff)
+			backoff = min(backoff * 2, backoff_max)
+		else:
+			# Clean iterator exit (no exception) — same treatment: reconnect.
+			logger.warning('Kafka consumer stream ended cleanly; reconnecting in %.1fs', backoff)
+			safe_inc(kafka_consumer_reconnects_total, topic=topic)
+			await asyncio.sleep(backoff)
+			backoff = min(backoff * 2, backoff_max)
 
 
 async def start_kafka_consumer(app: FastAPI | None = None) -> asyncio.Task:
@@ -121,7 +153,13 @@ async def start_kafka_consumer(app: FastAPI | None = None) -> asyncio.Task:
     # while the process is running, inbound events are not being consumed.
     safe_set(kafka_consumer_up, 1)
     task = asyncio.create_task(
-        _kafka_consumer_loop(broker, config.new_message_received_topic, mediator),
+        _kafka_consumer_loop(
+            broker,
+            config.new_message_received_topic,
+            mediator,
+            backoff_initial=config.kafka_consumer_backoff_initial,
+            backoff_max=config.kafka_consumer_backoff_max,
+        ),
         name='kafka-consumer',
     )
     # If the loop dies unexpectedly (crash instead of graceful stop), the
@@ -132,9 +170,13 @@ async def start_kafka_consumer(app: FastAPI | None = None) -> asyncio.Task:
 
 
 def _drop_consumer_heartbeat_if_dead(task: asyncio.Task) -> None:
-    # Graceful shutdown paths (stop_kafka_consumer / lifespan teardown) cancel
-    # the task; only an *unexpected* termination must clear the heartbeat here.
-    if not task.cancelled() and task.exception() is not None:
+    # Graceful shutdown cancels the task — the stop path has already set the
+    # gauge to 0, and re-setting it here is harmless. Any OTHER completion (an
+    # exception OR a clean return) must clear the heartbeat: a finished loop
+    # consumes nothing, so "up" would be a lie (O-1). The reconnect loop only
+    # returns via cancellation in practice, but this keeps the contract honest
+    # even if that ever changes.
+    if not task.cancelled():
         safe_set(kafka_consumer_up, 0)
 
 
