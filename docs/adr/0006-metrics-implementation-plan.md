@@ -308,6 +308,15 @@ phase; phases are mostly sequential. Estimated sizes assume the house convention
 > Note: on Prometheus v3 images the documented `docker run ... prom/prometheus:latest promtool ...`
 > form fails (`unexpected promtool`) — the image entrypoint no longer dispatches to
 > promtool; override with `--entrypoint=promtool` and pass `check rules <file>`.
+>
+> **`promtool check config` — re-executed 2026-09-25 after the alert additions (Docker up).**
+> Full compose wiring validates: mounting the repo's `prometheus.yml` and
+> `docker_compose/prometheus-alerts.yml` at their real container paths and running
+> `promtool check config /etc/prometheus/prometheus.yml` → `SUCCESS: 1 rule files found`,
+> `SUCCESS: 6 rules found`. Covers both alerts added since the 2026-09-17 run —
+> `KafkaConsumerReconnecting` (O-1) and `OutboxRelayCircuitOpen`
+> (`increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0`, O-2) — including the new
+> metric-reference expr. Same `--entrypoint=promtool` override as noted above.
 
 #### Chunk 7.3 ✅ — Document the metric registry (G8)
 - **Files:** `docs/adr/0006-metrics-implementation-plan.md` (this file — mark chunks ✅ as they land), `README.md`, `docs/architecture.md`.

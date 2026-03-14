@@ -87,7 +87,8 @@ Key wiring facts:
   (gate rejections only land in the breaker counter). Alert count 5 → 6. Synced:
   `docs/architecture.md` (added the missing `circuit_breaker_state/rejected_total` registry rows
   + alert table), `README.md` (metric list + alert count), `infrastructure/metrics.py` comment
-  (name label now documents 'mongo' + 'kafka').
+  (name label now documents 'mongo' + 'kafka'). `promtool check config` executed (Docker up):
+  1 rule file / 6 rules — also closes the 'promtool pending' caveat on the reconnect-alert entry.
 - **2026-09-25 — O-2 fixed: outbox relay guarded by a `'kafka'` circuit breaker.**
   `infrastructure/outbox/relay.py` (optional `circuit_breaker` field; open-state pre-check skips
   the batch — rows stay unsent; sends wrapped in `breaker.call()`; `CircuitOpenError` mid-batch
@@ -113,8 +114,9 @@ Key wiring facts:
   `docker_compose/prometheus-alerts.yml`: `increase(kafka_consumer_reconnects_total[15m]) > 0` —
   recency signal for broker stream death; reconnects self-heal, consumer death stays
   `KafkaConsumerDown`'s (critical) job. Alert count 4 → 5. Synced: `docs/architecture.md`
-  (metric + alert tables), `README.md` (metric list + alert count). Validated structurally
-  (promtool unavailable — Docker daemon off, same caveat as the original Chunk 7.2 run).
+  (metric + alert tables), `README.md` (metric list + alert count). Validated structurally;
+  `promtool` validation completed 2026-09-25 once Docker was available (see the breaker-alert
+  entry above).
 - **2026-09-25 — O-1 fixed: Kafka consumer reconnect + heartbeat.** `_kafka_consumer_loop`
   (`application/api/lifespan.py`) now wraps the stream in a reconnect loop with exponential backoff
   (initial 1s, cap 30s; `KAFKA_CONSUMER_BACKOFF_*` config; backoff resets on received messages).
