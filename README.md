@@ -115,9 +115,10 @@ Kafka failures; recovery via the half-open probe is automatic),
 `KafkaConsumerReconnecting` (`increase(kafka_consumer_reconnects_total[15m]) > 0`
 — recency signal for broker stream death; reconnects self-heal via backoff), and
 `WSBroadcastFailures`.
-Alertmanager wiring is planned in `docs/adr/0007-alertmanager-wiring.md` — until it
-lands, alerts surface in the Prometheus UI only. See `docs/architecture.md` →
-"Alert rules" for the full table.
+Alerts are routed through **Alertmanager** (`docker_compose/alertmanager.yaml`, per
+`docs/adr/0007-alertmanager-wiring.md`) with severity-based routing and inhibition; notifications
+post to the app's `/ops/alerts` webhook sink, so every alert appears in the structured JSON logs.
+See `docs/architecture.md` → "Alert rules" for the full table.
 
 Quick check that the endpoint is live:
 

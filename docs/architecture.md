@@ -171,9 +171,12 @@ Prometheus evaluates the rules in `docker_compose/prometheus-alerts.yml`
 The `outbox_pending > 200` threshold is calibrated from the 2026-09-17 Locust
 baseline (50 users, ~16 msg/s: `outbox_pending` max=35, p95=21; relay drained to
 0 with 0 errors — see ADR-0006 Q1). Recalibrate after major load-profile changes
-(`loadtest/locustfile.py`). Alertmanager routing/wiring is planned in
-`docs/adr/0007-alertmanager-wiring.md` (routing tree, dedup/inhibition, silences, receiver
-options); until it lands, alerts surface in Prometheus's own UI only. Validate rules with
+(`loadtest/locustfile.py`). Alerts are delivered to **Alertmanager**
+(`docker_compose/alertmanager.yaml`, UI at `:${ALERTMANAGER_PORT}`) per
+`docs/adr/0007-alertmanager-wiring.md`: severity-asymmetric routing, inhibition pairs
+(CircuitOpen mutes RelayFailing; ConsumerDown mutes Reconnecting), and receivers posting to the
+app's webhook sink `POST /ops/alerts` — every alert lands in the structured JSON logs
+(Loki/dashboard log panel) until a paging transport is chosen. Validate rules with
 `promtool check rules` before merging rule changes.
 
 Metrics marked **candidate** in the registry above are the pool for future

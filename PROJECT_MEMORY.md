@@ -5,7 +5,7 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-25** · Tests: **211 passed** (`cd app && poetry run pytest`, ~3s)
+> Last updated: **2026-09-25** · Tests: **217 passed** (`cd app && poetry run pytest`, ~5s)
 
 ---
 
@@ -80,6 +80,17 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — ADR-0007 Chunks 1-3 implemented (webhook-sink transport, no external creds).**
+  Alertmanager runs in the stack (`docker_compose/alertmanager.yaml` +
+  `alertmanager/alertmanager.yml`, `ALERTMANAGER_PORT=9093` in both env files, make targets
+  extended symmetrically); prometheus.yml gained the `alerting:` peer + an `alertmanager`
+  self-monitoring job. Routing: severity-asymmetric (critical 0s wait/1h repeat, warnings 5m/12h),
+  inhibition pairs from the drill, all receivers → `POST /ops/alerts` webhook sink on the app
+  (`application/api/ops/handlers.py`: severity→log level, resolved=INFO, runbook appended; 6 new
+  tests; suite 211 → 217). Verified: amtool check-config + routes test (all 3 paths), promtool
+  clean, live E2E — temp critical rule → AM active → CRITICAL line in the app JSON logs.
+  Telegram transport stays available: swap receiver URLs only. Silencing procedure added to the
+  kafka-outage runbook. ADR-0007 §9 records the implementation status + deviations.
 - **2026-09-25 — ADR-0007: Alertmanager wiring plan.** `docs/adr/0007-alertmanager-wiring.md`
   (Proposed): closes the follow-up deferred since ADR-0006 Chunk 7.2. Four chunks — (1) run
   Alertmanager in the stack (compose file, `alerting:` section in prometheus.yml, make targets,

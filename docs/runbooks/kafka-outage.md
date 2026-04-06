@@ -98,6 +98,14 @@ connectivity problem, do not restart the app.
 4. The alert **self-resolves ~15 minutes after the last rejection** (recency window) — do not
    expect it to clear the moment Kafka is back.
 
+**Silencing (planned drills):** before a planned Kafka drill or maintenance, silence the affected
+alerts instead of editing rules — `amtool silences add` or the Alertmanager UI
+(`:${ALERTMANAGER_PORT}`), e.g. matchers
+`{alertname=~"OutboxRelayCircuitOpen|OutboxRelayFailing|OutboxBacklogGrowing"}` with
+`--duration=45m --author=<who> --comment="planned kafka drill"`; expire afterwards with
+`amtool silences expire <id>`. Alerts keep firing into the sink log while silenced — they just
+stop being notified.
+
 **Data-safety:** delivery is at-least-once — the same `event_id` can be redelivered after a crash
 between send and mark-as-sent; downstream consumers dedupe on it. Requires the 2026-09-25
 send-ack fix (`send_and_wait`); on older builds rows were marked sent before the broker ack and

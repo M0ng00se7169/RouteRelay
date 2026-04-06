@@ -1,6 +1,6 @@
 # ADR-0007: Alertmanager Wiring — Routing, Deduplication, Silences
 
-**Status**: Proposed (plan only — nothing implemented)
+**Status**: Accepted — Chunks 1–3 implemented 2026-09-25 with the webhook-sink transport (see §9); Telegram receiver remains an open option
 **Created**: 2026-09-25
 **Scope**: `docker_compose/` (new alertmanager service), `prometheus.yml`, `.env*`; no app code
 **Related**: ADR-0006 (metrics + alert rules, Chunk 7.2 deferred Alertmanager wiring),
@@ -54,7 +54,7 @@ Alert inventory with the labels this plan relies on:
 
 ---
 
-## 2. Chunk 1 — Run Alertmanager in the stack ✅ planned
+## 2. Chunk 1 — Run Alertmanager in the stack ✅ implemented 2026-09-25
 
 **Files (new):** `docker_compose/alertmanager.yaml`, `docker_compose/alertmanager/alertmanager.yml`
 **Files (edit):** `prometheus.yml` (alerting section), `Makefile` (targets), `.env.example`,
@@ -121,7 +121,7 @@ alerting:
 
 ---
 
-## 3. Chunk 2 — Routing tree
+## 3. Chunk 2 — Routing tree ✅ implemented 2026-09-25
 
 The whole design in one tree (start in `alertmanager/alertmanager.yml`):
 
@@ -193,7 +193,7 @@ must land in the intended receiver); one live end-to-end firing per receiver.
 
 ---
 
-## 4. Chunk 3 — Receiver integration (decision needed)
+## 4. Chunk 3 — Receiver integration ✅ implemented 2026-09-25 (webhook sink; Telegram deferred)
 
 The plan is agnostic about the transport; candidates, pre-compared:
 
@@ -250,6 +250,36 @@ mode; a dry-run drill can be silenced with one command and leaves no config diff
   — natural follow-up once self-monitoring lands.
 - On-call schedules/escalation — requires the vendor decision from Chunk 3.
 - Notification templates (custom Telegram formatting) — after the transport exists.
+
+---
+
+## 9. Implementation status (2026-09-25)
+
+Chunks 1–3 landed the same day as the plan, using the **webhook-sink transport** (no external
+credentials — the Telegram option stays available for later and only requires changing receiver
+URLs):
+
+- **Sink endpoint:** `POST /ops/alerts` on the app (`application/api/ops/handlers.py`) logs each
+  alert into the structured JSON stream — firing maps severity→level (critical→CRITICAL,
+  warning→WARNING, unknown→WARNING fallback), resolved logs INFO, runbook_url is appended.
+  Deliberately unauthenticated (backend-network only, payload non-sensitive). 6 tests in
+  `test/application/api/test_alert_sink.py`; suite 211 → 217.
+- **Wiring:** `docker_compose/alertmanager.yaml` (with `alertmanager-data` volume) +
+  `docker_compose/alertmanager/alertmanager.yml` exactly as designed in §3; `alerting:` section
+  and an `alertmanager` self-monitoring scrape job added to `prometheus.yml`; `ALERTMANAGER_PORT=9093`
+  in BOTH `.env` and `.env.example`; `prometheus`/`prometheus-down`/`all`/`all-down` make targets
+  extended symmetrically.
+- **Validation:** `amtool check-config` SUCCESS (route, 2 inhibit rules, 3 receivers);
+  `amtool config routes test` → critical→`oncall-critical`, warning→`team-warnings`,
+  unknown→`default-log`; promtool check config still SUCCESS.
+- **Live E2E acceptance (§7):** a temporary `vector(1)` critical rule fired in Prometheus →
+  Alertmanager `active/critical` → the sink logged `ALERT TestAlertWiring firing: …` at CRITICAL
+  (visible in `docker logs main-app` / Loki). Temp rule removed; AM restart cleared the retained
+  entry and confirmed the peer re-attaches. Prometheus `/api/v1/alertmanagers` shows the peer;
+  `up{job="alertmanager"}` target is up.
+- **Deviation from the ADR sketch:** all three receivers use the webhook sink (the sketch's
+  `default-log` alternative became the whole transport for now); self-monitoring (planned as
+  optional in Chunk 4) was pulled into Chunk 2 because it was free.
 
 ---
 
