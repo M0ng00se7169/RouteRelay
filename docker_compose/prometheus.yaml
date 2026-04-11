@@ -5,11 +5,21 @@ services:
     ports:
       - '${PROMETHEUS_PORT}:9090'
     volumes:
-      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      # prometheus.yml lives at the repo root: compose resolves relative paths
+      # against THIS file's directory (docker_compose/), so ../ is required.
+      # prometheus-alerts.yml lives alongside this compose file.
+      - ../prometheus.yml:/etc/prometheus/prometheus.yml
+      - ./prometheus-alerts.yml:/etc/prometheus/prometheus-alerts.yml:ro
+      # Persist the TSDB (default storage.tsdb.path in the official image)
+      # so metrics history survives a down/up cycle (scratch issue 08).
+      - prometheus-data:/prometheus
     networks:
       - backend
     depends_on:
       - main-app
+
+volumes:
+  prometheus-data:
 
 networks:
   backend:
