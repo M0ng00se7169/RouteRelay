@@ -61,7 +61,8 @@ if it and an older doc disagree, trust it but re-verify line numbers.
 `PROJECT_MEMORY.md` §5 summarizes. Top items:
 - ~~Kafka consumer reconnect~~ **fixed 2026-09-25** (O-1): reconnect/backoff + reconnect metric;
   `kafka_consumer_up` stays 1 through reconnects, drops on stop/any task exit
-- Outbox relay not circuit-breaker-guarded (nice-to-have; it already retries per tick) (O-2)
+- ~~Outbox relay not circuit-breaker-guarded~~ **fixed 2026-09-25** (O-2): the relay now runs its
+  sends through a private `'kafka'` breaker (`create_outbox_relay`); open breaker skips the batch
 - ~~`ruff` missing from the poetry env~~ **fixed 2026-09-25** (O-3): `poetry run ruff check <files>`
   works now — run it on changed files as part of verification
 

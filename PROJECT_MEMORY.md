@@ -5,7 +5,7 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-25** · Tests: **206 passed** (`cd app && poetry run pytest`, ~2.5s)
+> Last updated: **2026-09-25** · Tests: **211 passed** (`cd app && poetry run pytest`, ~3s)
 
 ---
 
@@ -51,6 +51,10 @@ Key wiring facts:
 - `app/infrastructure/resilience.py`: `CircuitBreaker` (closed → open after N consecutive failures →
   half-open probe after `recovery_time` → closed). Proxies: `CircuitBreakerChatsRepository`,
   `CircuitBreakerMessagesRepository` wrap the Mongo repos in `init.py` — one shared `'mongo'` breaker.
+- A second, **private** `'kafka'` breaker (same config knobs, NOT registered under the
+  `CircuitBreaker` type — that key is the mongo one) guards the outbox relay's sends: open-state
+  pre-check skips the batch, sends go through `breaker.call()`, `CircuitOpenError` mid-batch stops
+  the batch without a histogram sample. `OutboxRelay.circuit_breaker=None` disables it (tests).
 - `CircuitOpenError` → app-level handler in `application/api/main.py` → **HTTP 503 + Retry-After**
   (registered at app level on purpose: endpoints' broad `except ApplicationException → 400` would
   otherwise swallow it — do not add ApplicationException subclasses for infra errors).
@@ -70,12 +74,20 @@ Key wiring facts:
   (see `docs/cqrs-contract.md`).
 - **Formatting:** ruff line-length 100, single quotes, **tabs** in some files / **4 spaces** in
   others — match the file you are editing, do not reformat.
-- **After code changes:** `cd app && poetry run pytest` (all 202 must stay green).
+- **After code changes:** `cd app && poetry run pytest` (all 211 must stay green).
 
 ---
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — O-2 fixed: outbox relay guarded by a `'kafka'` circuit breaker.**
+  `infrastructure/outbox/relay.py` (optional `circuit_breaker` field; open-state pre-check skips
+  the batch — rows stay unsent; sends wrapped in `breaker.call()`; `CircuitOpenError` mid-batch
+  skips the histogram sample — a rejection is not an attempt), `logic/init.py`
+  (`create_outbox_relay` builds the private `'kafka'` breaker from the shared config knobs),
+  tests `test/infrastructure/outbox/test_relay.py` (+6: trip, fail-fast skip, mid-batch trip,
+  recovery resume, back-compat). Gotcha: `call()`'s success-reset wipes an externally-set open
+  state — breakers can only be tripped by their own failed operations. Test count 206 → 211.
 - **2026-09-25 — Circuit breaker for the Mongo path.** Files: `infrastructure/resilience.py` (new),
   `logic/init.py`, `application/api/main.py`, `settings/config.py`, `infrastructure/metrics.py`,
   `test/fixtures.py` (opt-in `wrap_repos_with_breaker=True`), tests
@@ -112,12 +124,10 @@ Key wiring facts:
 
 ## 5. Open issues (verified against source on 2026-09-25)
 
-`docs/known-issues.md` was rewritten 2026-09-25 and now matches reality — it holds the per-issue
-detail (O-1 … O-3) plus a one-line index of the 8 formerly-listed issues (all verified fixed).
-Summary:
-
-1. **O-2 (Low): outbox relay not circuit-breaker-guarded** — nice-to-have; wrap
-   `message_broker.send_message` with a `'kafka'` breaker to skip doomed sends during outages.
+`docs/known-issues.md` was rewritten 2026-09-25 and now matches reality — it holds a one-line
+index of the formerly-listed issues. **No open issues remain:** all 8 legacy entries plus O-1
+(Kafka consumer reconnect + heartbeat), O-2 (relay `'kafka'` breaker) and O-3 (ruff in poetry env)
+are verified fixed as of 2026-09-25.
 
 ---
 
