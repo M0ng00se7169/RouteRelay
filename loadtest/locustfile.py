@@ -1,11 +1,18 @@
+import logging
+import uuid
+
+from faker import Faker
 from locust import (
-    between,
-    FastHttpUser,
-    task,
+	between,
+	FastHttpUser,
+	task,
 )
 
 
+logger = logging.getLogger(__name__)
+
 API_BASE = '/chat'
+fake = Faker()
 
 
 class KafkaChatUser(FastHttpUser):
@@ -18,23 +25,34 @@ class KafkaChatUser(FastHttpUser):
 	wait_time = between(1, 3)
 
 	def on_start(self) -> None:
-		# Pre-create a chat once per user, then exercise the message endpoints
-		# against that chat for the rest of the run.
-		resp = self.client.post(
-			API_BASE, json={'name': 'load-test-chat'}, name='POST /chat',
-		)
-		if resp.status_code == 200:
-			self.chat_id = resp.json().get('oid')
-		else:
-			self.chat_id = None
+		# The API expects {'title': ...} and answers 201 Created. Titles must be
+		# unique (duplicates are rejected with 400), so each user mints one with
+		# a random suffix; faker supplies the readable part.
+		for attempt in range(3):
+			title = f'load-test-{fake.word()}-{uuid.uuid4().hex[:8]}'
+			resp = self.client.post(
+				f'{API_BASE}/',
+				json={'title': title},
+				name='POST /chat/',
+			)
+			if resp.status_code == 201:
+				self.chat_id = resp.json().get('oid')
+				return
+			logger.warning(
+				'Chat creation attempt %s failed: %s %s',
+				attempt + 1, resp.status_code, resp.text[:200],
+			)
+		self.chat_id = None
+		logger.error('Giving up chat creation; this user will not generate load')
 
 	@task(3)
 	def post_message(self) -> None:
 		if not self.chat_id:
 			return
+		# CreateMessageSchema accepts {'text': ...} only.
 		self.client.post(
 			f'{API_BASE}/{self.chat_id}/messages',
-			json={'text': 'load test message', 'listener_oid': 'loadtest'},
+			json={'text': fake.sentence()},
 			name='POST /chat/{id}/messages',
 		)
 
@@ -42,7 +60,9 @@ class KafkaChatUser(FastHttpUser):
 	def list_messages(self) -> None:
 		if not self.chat_id:
 			return
+		# Trailing slash matters: the route is registered as /messages/, and
+		# hitting it exactly avoids a 307 redirect on every request.
 		self.client.get(
-			f'{API_BASE}/{self.chat_id}/messages',
-			name='GET /chat/{id}/messages',
+			f'{API_BASE}/{self.chat_id}/messages/',
+			name='GET /chat/{id}/messages/',
 		)
