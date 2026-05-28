@@ -150,10 +150,16 @@ async def test_kafka_start_creates_producer_and_consumer():
 
 	producer = AsyncMock()
 	consumer = AsyncMock()
+	producer_kwargs: dict = {}
+
+	def _capture_producer(**kwargs):
+		producer_kwargs.update(kwargs)
+		return producer
+
 	# Patch the aiokafka classes so start() does not open a real network connection.
 	import infrastructure.message_brokers.kafka as kafka_mod
 	orig_p, orig_c = kafka_mod.AIOKafkaProducer, kafka_mod.AIOKafkaConsumer
-	kafka_mod.AIOKafkaProducer = lambda **k: producer  # noqa: N801
+	kafka_mod.AIOKafkaProducer = _capture_producer  # noqa: N801
 	kafka_mod.AIOKafkaConsumer = lambda **k: consumer  # noqa: N801
 	try:
 		await broker.start()
@@ -164,6 +170,10 @@ async def test_kafka_start_creates_producer_and_consumer():
 	assert broker.consumer is consumer
 	producer.start.assert_awaited_once()
 	consumer.start.assert_awaited_once()
+	# Durability: the awaited ack must require every in-sync replica, not just
+	# the leader (acks=1 is the aiokafka default).
+	assert producer_kwargs['acks'] == 'all'
+	assert producer_kwargs['bootstrap_servers'] == 'localhost:9092'
 
 
 @pytest.mark.asyncio

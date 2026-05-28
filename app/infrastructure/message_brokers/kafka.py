@@ -23,11 +23,19 @@ class KafkaMessageBroker(BaseMessageBroker):
 	bootstrap_servers: str
 	group_id: str = 'chat'
 	metadata_max_age_ms: int = 30000
+	# Durability: 'all' makes the awaited ack (send_and_wait) require every
+	# in-sync replica, not just the leader — aiokafka defaults to acks=1. On the
+	# single-broker dev cluster the ISR is just the leader, so behavior is
+	# unchanged there; this hardens the guarantee for any cluster with RF>1.
+	acks: str = 'all'
 	producer: Optional[AIOKafkaProducer] = field(default=None, init=False)
 	consumer: Optional[AIOKafkaConsumer] = field(default=None, init=False)
 
 	async def start(self):
-		self.producer = AIOKafkaProducer(bootstrap_servers=self.bootstrap_servers)
+		self.producer = AIOKafkaProducer(
+			bootstrap_servers=self.bootstrap_servers,
+			acks=self.acks,
+		)
 		self.consumer = AIOKafkaConsumer(
 			bootstrap_servers=self.bootstrap_servers,
 			group_id=self.group_id,
