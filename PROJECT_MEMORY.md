@@ -80,6 +80,11 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — Producer durability: `acks=all`.** `KafkaMessageBroker` gained an `acks` field
+  (default `'all'`, passed to `AIOKafkaProducer`). With sends now awaiting the ack (see the drill
+  fix below), the ack requires every in-sync replica instead of aiokafka's default `acks=1`.
+  Unchanged on the single-broker dev cluster (ISR is just the leader; verified live — message read
+  back from the topic log, relay drain clean, breaker closed). Test count unchanged (211).
 - **2026-09-25 — Live fire drill found+fixed: producer sends were not awaiting the ack.**
   `KafkaMessageBroker.send_message` now uses `producer.send_and_wait()` (was `send()`, which only
   buffers and returns a delivery future): broker failures never surfaced, outbox rows were marked
