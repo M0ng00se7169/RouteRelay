@@ -22,6 +22,14 @@
 #   restart — it fires while there was at least one reconnect in the last
 #   15 minutes and clears ~15m after the last one. Actual consumer death is
 #   KafkaConsumerDown's job; if this alert becomes noisy, raise the window.
+# - OutboxRelayCircuitOpen uses the same recency pattern on the relay's 'kafka'
+#   breaker (O-2). circuit_breaker_rejected_total only counts GATE rejections
+#   (sends skipped while the breaker is open) — the failures that trip the
+#   breaker land in outbox_publish_errors_total instead. This closes the gap
+#   where OutboxRelayFailing goes quiet precisely because the breaker stopped
+#   the doomed sends. Recovery is automatic via the half-open probe
+#   (CIRCUIT_BREAKER_RECOVERY_TIME, default 30s), so like the reconnect alert
+#   this tolerates a brief outage and clears ~15m after the last rejection.
 groups:
   - name: kafka-chat
     rules:
@@ -41,6 +49,14 @@ groups:
         annotations:
           summary: 'Outbox relay is failing to publish ({{ $value }} errors/s)'
           description: 'The relay recorded publish errors in the last 5 minutes; failed rows stay unsent and are retried on the next tick.'
+
+      - alert: OutboxRelayCircuitOpen
+        expr: increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Kafka circuit breaker open — relay sends skipped ({{ $value }} in 15m)'
+          description: 'The relay''s ''kafka'' circuit breaker is rejecting sends after repeated Kafka failures — the outbox batch is skipped while it stays open, so OutboxRelayFailing goes quiet. Rows stay unsent and drain once the half-open probe succeeds (recovery window CIRCUIT_BREAKER_RECOVERY_TIME, default 30s). If this repeats, check Kafka health (KafkaConsumerReconnecting/Down cover the consumer side).'
 
       - alert: KafkaConsumerDown
         expr: kafka_consumer_up == 0 and up{job='kafka-chat-api'} == 1
