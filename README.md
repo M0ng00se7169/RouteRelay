@@ -56,7 +56,7 @@ app/
 
 1. **CQRS + Mediator** — HTTP handlers delegate to a `Mediator` that routes **commands** (writes), **queries** (reads), and **domain events** (side effects).
 2. **Rich domain model** — `Chat` and `Message` entities register domain events (`NewChatCreatedEvent`, `NewMessageReceivedEvent`, etc.) when state changes.
-3. **Event publishing** — After persistence, command handlers call `mediator.publish()` to trigger event handlers that push to Kafka and/or WebSocket clients.
+3. **Event publishing** — After persistence, command handlers call `mediator.publish()` to trigger in-process event handlers (e.g. the WebSocket disconnect on chat deletion); **Kafka delivery goes through the Transaction Outbox relay** (see below), and the broker→WebSocket consumer loop fans messages out to chat clients.
 4. **Dependency injection** — `punq` container in `logic/init.py` wires repositories, Kafka, WebSocket manager, and the mediator.
 
 ### Transaction Outbox & Relay
@@ -67,7 +67,7 @@ Writes are made **atomic with their event emissions** using the [Transaction Out
 2. A background **relay worker** (`infrastructure/outbox/relay.py`, driven by `aiojobs`) polls the `outbox` collection for unsent rows and publishes each row's payload to its Kafka topic.
 3. After a row is delivered, the relay marks it sent. Delivery is **at-least-once** — a crash between send and mark may re-send a row once; downstream consumers dedupe on the stable `event_id` key.
 
-This decouples write latency from Kafka availability: a Kafka outage only delays delivery, it never drops events. The event handlers under `logic/events/messages.py` now write to the outbox instead of sending to Kafka directly.
+This decouples write latency from Kafka availability: a Kafka outage only delays delivery, it never drops events. The **command handlers** write the outbox row inside the same transaction; the event handlers under `logic/events/messages.py` keep only in-process side effects and no longer send to Kafka directly.
 
 > ⚠️ **MongoDB must run as a single-node replica set** for transactions to work. The compose stack starts Mongo with `--replSet rs0` and a one-shot `init-mongo` service runs `rs.initiate()`. The connection URI in `.env` must include `?replicaSet=rs0`.
 
@@ -75,12 +75,50 @@ This decouples write latency from Kafka availability: a Kafka outage only delays
 
 #### Metrics (Prometheus)
 
-`/metrics` is exposed on the app (HTTP `*_requests`/`*_requests_duration` from `prometheus-fastapi-instrumentator` → `http_requests_total`, `http_request_duration_seconds_bucket`) plus custom outbox/Kafka counters defined in `infrastructure/metrics.py`:
+`/metrics` is exposed on the app (HTTP `*_requests`/`*_requests_duration` from `prometheus-fastapi-instrumentator` → `http_requests_total`, `http_request_duration_seconds_bucket`) plus custom metrics defined in `infrastructure/metrics.py`:
 
 - `outbox_published_total` — rows forwarded to Kafka by the relay
 - `outbox_publish_errors_total` — relay send failures
 - `outbox_pending` — rows currently unsent in the outbox
-- `kafka_messages_sent_total` — messages the relay sent to Kafka
+- `kafka_messages_sent_total{topic}` — messages the relay sent to Kafka, per topic
+- `outbox_publish_duration_seconds{topic}` — relay send latency per row, per topic
+- `kafka_messages_consumed_total{topic}` / `kafka_consumer_events_published_total{topic}` / `kafka_consumer_errors_total{topic}` — inbound consumer-loop throughput and failures
+- `kafka_consumer_malformed_total` — consumed messages that failed validation (no chat_oid/message)
+- `kafka_consumer_up` — 1 while the consumer loop task is running, 0 after stop or crash
+- `ws_connections_active` / `ws_connections_accepted_total` / `ws_connections_removed_total` — live WebSocket connection tracking (gauge recomputed from the manager's own map on every accept/remove)
+- `ws_messages_broadcast_total` / `ws_broadcast_failures_total` — fan-out successes and per-socket send failures (one dead socket no longer aborts the fan-out)
+- `ws_broadcast_duration_seconds` — fan-out latency, including failed per-socket attempts
+- `mediator_events_published_total{event}` / `mediator_commands_handled_total{command}` / `mediator_queries_handled_total{query}` — CQRS flow volume per message class (unregistered commands are not counted)
+- `db_operation_errors_total{operation,collection,exception}` — persistence-call failures in the command/query handlers (domain errors like `ChatNotFoundException` are not counted)
+- `telegram_notifications_sent_total` / `telegram_notifications_failed_total` — Telegram delivery attempts (nothing counted when Telegram is unconfigured)
+- `application_info{version}` — build info, always 1; version comes from the `APP_VERSION` env var (default `0.1.0`)
+
+The full metric registry — names, types, labels, owners, meanings, and
+alert-worthiness — lives in `app/infrastructure/metrics.py` and is documented in
+`docs/architecture.md` (→ "Observability") and ADR-0006. Add new metrics **only**
+to the registry module — never ad-hoc in feature modules.
+
+#### Alerts (Prometheus rules)
+
+`docker_compose/prometheus-alerts.yml` (loaded via `rule_files` in
+`prometheus.yml`) defines four alerts: `OutboxBacklogGrowing`
+(`outbox_pending > 200 for 5m` — calibrated from a Locust baseline: 50 users,
+~16 msg/s produced `outbox_pending` max=35, so 200 is ~6x the observed peak and
+2x the relay's per-tick drain capacity), `OutboxRelayFailing`, `KafkaConsumerDown`
+(critical; guarded by the app's `up` so a dead target doesn't double-page), and
+`WSBroadcastFailures`.
+Alertmanager wiring is a deferred follow-up — alerts currently surface in the
+Prometheus UI only. See `docs/architecture.md` → "Alert rules" for the full
+table.
+
+Quick check that the endpoint is live:
+
+```bash
+curl localhost:8000/metrics | head -50
+
+# or filter for the app's own metrics:
+curl -s localhost:8000/metrics | grep -E 'outbox_|kafka_messages_sent'
+```
 
 Run `make prometheus` to bring up a Prometheus container that scrapes `main-app:8000/metrics` (UI at `:${PROMETHEUS_PORT}`). Prometheus also **self-scrapes** `localhost:9090` so the `up` metric covers the server itself. TSDB data is persisted in the `prometheus-data` volume.
 
@@ -112,18 +150,23 @@ sequenceDiagram
     participant Mediator
     participant Cmd as CreateMessageCommandHandler
     participant Mongo as MongoDB
-    participant Events as Event Handlers
+    participant Relay as Outbox Relay
     participant Kafka
+    participant Consumer as Kafka Consumer Loop
     participant WS as WebSocket Clients
 
     Client->>API: POST /chat/{id}/messages
     API->>Mediator: handle_command(CreateMessageCommand)
     Mediator->>Cmd: handle()
-    Cmd->>Mongo: save message
+    Cmd->>Mongo: transaction: save message + outbox row
     Cmd->>Mediator: publish(NewMessageReceivedEvent)
-    Mediator->>Events: NewMessageReceivedEventHandler
-    Events->>Kafka: publish to new-messages topic
-    Note over Kafka,WS: Consumer loop for broker→WS is defined but not wired in lifespan
+    Note over Relay,Mongo: background task (aiojobs)
+    Relay->>Mongo: poll unsent outbox rows
+    Relay->>Kafka: publish to new-messages topic
+    Relay->>Mongo: mark row sent
+    Consumer->>Kafka: consume new-messages
+    Consumer->>WS: fan out message to the chat room
+    Note over Kafka,WS: broker→WS consumer loop is wired in the app lifespan (start_kafka_consumer)
 ```
 
 
@@ -361,8 +404,14 @@ locust -f loadtest/locustfile.py --host http://localhost:8000 \
 See `loadtest/README.md` for the web-UI mode and what endpoints it hits. Watch
 `http_requests_total` and the outbox counters move in Grafana.
 
-### 8. Observability stack
 
+### 9. Telegram Notification Integration
+The system now supports receiving notifications when a user adds a listener to a chat.
+
+- **Feature:** When a user sends a `POST /chat/{chat_oid}/listeners/` request, the system registers the listener in MongoDB.
+- **Event Flow:** This action publishes a `ListenerAddedEvent` to Kafka. The `ListenerAddedEventHandler` now includes logic to use the `TelegramNotificationClient` (registered in `app/logic/init.py`) to send a notification to the user's configured `telegram_chat_id`.
+
+This completes the feature implementation, requiring no further setup beyond the standard Docker Compose stack.
 `make all` brings up Loki, Promtail, and Grafana alongside the app. Grafana is
 pre-provisioned with Prometheus + Loki datasources and the `kafka-chat-overview`
 dashboard, so metrics and `{container="main-app"}` logs are visible immediately

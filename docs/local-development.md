@@ -24,6 +24,8 @@ Outbox + Prometheus work, see `docs/stateless-inventing-yao.md`.
 | Service | URL |
 |---|---|
 | API docs | http://localhost:8000/api/docs |
+| App metrics endpoint | http://localhost:8000/metrics |
+| Prometheus server | http://localhost:9090 (port from `PROMETHEUS_PORT`) |
 | Mongo Express | http://localhost:28081 |
 | Kafka UI | http://localhost:8090 |
 | MongoDB | `localhost:27017` |
