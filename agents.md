@@ -20,6 +20,15 @@ It complements `.claude/rules/*.md` (structural rules) and `CLAUDE.md` (architec
 
 ---
 
+## Project Memory (READ FIRST)
+
+**`PROJECT_MEMORY.md`** is the living snapshot of the project: current architecture, recently
+completed changes, and verified open issues. **Read it at session start** — it saves scanning the
+repo — and **update it (sections 4–5) after every meaningful change**. It is newer than the docs;
+if it and an older doc disagree, trust it but re-verify line numbers.
+
+---
+
 ## Tool Use Rules
 
 1. **Always use `read` before editing** — you have the file in context already, it won't be in the agent's context.
@@ -48,10 +57,13 @@ It complements `.claude/rules/*.md` (structural rules) and `CLAUDE.md` (architec
 
 ## Known Issues to Watch
 
-See `docs/known-issues.md`. Common gotchas:
-- `BaseConnectionManager` registered twice (init.py:122, :227)
-- `init_dummy_container` does NOT override `BaseMessagesRepository` — message tests need extra setup
-- `MemoryChatRepository` only implements 3/7 `BaseChatsRepository` methods
+`docs/known-issues.md` (rewritten 2026-09-25) holds the verified open issues with detail;
+`PROJECT_MEMORY.md` §5 summarizes. Top items:
+- ~~Kafka consumer reconnect~~ **fixed 2026-09-25** (O-1): reconnect/backoff + reconnect metric;
+  `kafka_consumer_up` stays 1 through reconnects, drops on stop/any task exit
+- Outbox relay not circuit-breaker-guarded (nice-to-have; it already retries per tick) (O-2)
+- ~~`ruff` missing from the poetry env~~ **fixed 2026-09-25** (O-3): `poetry run ruff check <files>`
+  works now — run it on changed files as part of verification
 
 ---
 
