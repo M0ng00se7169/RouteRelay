@@ -1,75 +1,55 @@
 from dataclasses import dataclass
-from typing import ClassVar
-
-from infrastructure.message_brokers.converters import convert_event_to_broker_message
 
 from domain.events.messages import (
     ChatDeletedEvent,
     ListenerAddedEvent,
     NewChatCreatedEvent,
     NewMessageReceivedEvent,
+    NewMessageReceivedFromBrokerEvent,
 )
-from logic.events.base import (
-    EventHandler,
-    IntegrationEvent,
-)
+from logic.events.base import EventHandler
 
 
-@dataclass
-class NewChatCreatedEventHandler(EventHandler[NewChatCreatedEvent, None]):
+# NOTE: Kafka delivery is no longer performed here. The Transaction Outbox relay
+# (infrastructure.outbox.relay.OutboxRelay) is the sole writer to Kafka, reading
+# unsent rows written atomically with the business data. These handlers keep only
+# in-process side effects (e.g. WebSocket disconnect on chat deletion). The
+# inherited message_broker/connection_manager/broker_topic fields remain part of
+# the EventHandler contract but are no longer used for sending.
+
+
+@dataclass(frozen=True)
+class NewChatCreatedEventHandler(EventHandler):
     async def handle(self, event: NewChatCreatedEvent) -> None:
-        await self.message_broker.send_message(
-            topic=self.broker_topic,
-            value=convert_event_to_broker_message(event=event),
-            key=str(event.event_id).encode(),
-        )
-        print(f'Proceeded event {event.title}')
+        # Outbox relay delivers the event to Kafka; no in-process side effect here.
+        ...
 
 
-@dataclass
-class ListenerAddedEventHandler(EventHandler[ListenerAddedEvent, None]):
-    async def handle(self, event: NewChatCreatedEvent) -> None:
-        await self.message_broker.send_message(
-            topic=self.broker_topic,
-            value=convert_event_to_broker_message(event=event),
-            key=str(event.event_id).encode(),
-        )
+@dataclass(frozen=True)
+class ListenerAddedEventHandler(EventHandler):
+    async def handle(self, event: ListenerAddedEvent) -> None:
+        # Outbox relay delivers the event to Kafka; no in-process side effect here.
+        ...
 
 
-@dataclass
-class NewMessageReceivedEventHandler(EventHandler[NewMessageReceivedEvent, None]):
+@dataclass(frozen=True)
+class NewMessageReceivedEventHandler(EventHandler):
     async def handle(self, event: NewMessageReceivedEvent) -> None:
-        await self.message_broker.send_message(
-            topic=self.broker_topic,
-            value=convert_event_to_broker_message(event=event),
-            key=event.chat_oid.encode(),
-        )
+        # Outbox relay delivers the event to Kafka; no in-process side effect here.
+        ...
 
 
-@dataclass
-class NewMessageReceivedFromBrokerEvent(IntegrationEvent):
-    event_title: ClassVar[str] = 'New Message From Broker Received'
-
-    message_text: str
-    message_oid: str
-    chat_oid: str
+@dataclass(frozen=True)
+class ChatDeletedEventHandler(EventHandler):
+    async def handle(self, event: ChatDeletedEvent) -> None:
+        # Outbox relay delivers the event to Kafka; the disconnect is a WS concern only.
+        await self.connection_manager.disconnect_all(key=event.chat_oid)
 
 
-@dataclass
-class NewMessageReceivedFromBrokerEventHandler(EventHandler[NewMessageReceivedFromBrokerEvent, None]):
+@dataclass(frozen=True)
+class NewMessageReceivedFromBrokerEventHandler(EventHandler):
     async def handle(self, event: NewMessageReceivedFromBrokerEvent) -> None:
         await self.connection_manager.send_all(
             key=event.chat_oid,
-            bytes_=convert_event_to_broker_message(event=event),
+            bytes_=event.message.encode(),
         )
-
-
-@dataclass
-class ChatDeletedEventHandler(EventHandler[ChatDeletedEvent, None]):
-    async def handle(self, event: ChatDeletedEvent) -> None:
-        await self.message_broker.send_message(
-            topic=self.broker_topic,
-            value=convert_event_to_broker_message(event=event),
-            key=event.chat_oid.encode(),
-        )
-        await self.connection_manager.disconnect_all(event.chat_oid)

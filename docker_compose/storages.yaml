@@ -2,10 +2,33 @@ services:
   mongodb:
     container_name: chat-mongodb
     image: mongo:6-jammy
+    command: ['--replSet', 'rs0']
     ports:
       - '27017:27017'
     volumes:
       - dbdata6:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - backend
+
+  init-mongo:
+    image: mongo:6-jammy
+    container_name: init-mongo
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    restart: 'no'
+    command: >
+      bash -c "for i in $$(seq 1 30); do
+        mongosh --host mongodb:27017
+          --eval \"rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongodb:27017' }] })\"
+          && break;
+        echo 'waiting for mongo...'; sleep 2; done"
     networks:
       - backend
 
@@ -21,7 +44,8 @@ services:
       ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_DB_ADMIN_PASSWORD}
       ME_CONFIG_MONGODB_URL: mongodb://mongodb:27017/
     depends_on:
-      - mongodb
+      mongodb:
+        condition: service_healthy
     networks:
       - backend
 

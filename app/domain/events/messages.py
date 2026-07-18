@@ -33,3 +33,7 @@ class ChatDeletedEvent(BaseEvent):
     title: ClassVar[str] = 'Chat Has Been Deleted'
 
     chat_oid: str
+@dataclass
+class NewMessageReceivedFromBrokerEvent(BaseEvent):
+    message: str
+    chat_oid: str

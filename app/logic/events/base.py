@@ -24,7 +24,7 @@ class IntegrationEvent(BaseEvent, ABC):
     ...
 
 
-@dataclass
+@dataclass(frozen=True)
 class EventHandler(ABC, Generic[ET, ER]):
     message_broker: BaseMessageBroker
     connection_manager: BaseConnectionManager

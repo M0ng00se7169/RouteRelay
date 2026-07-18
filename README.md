@@ -25,9 +25,10 @@
 
 **Infrastructure services (Docker Compose):**
 
-- MongoDB + Mongo Express (admin UI on port 28081)
+- MongoDB (single-node replica set) + Mongo Express (admin UI on port 28081)
 - Kafka + Zookeeper + Kafka UI (port 8090)
 - FastAPI app (port from `API_PORT` in `.env`)
+- Prometheus (port from `PROMETHEUS_PORT` in `.env`)
 
 ---
 
@@ -55,6 +56,29 @@ app/
 2. **Rich domain model** — `Chat` and `Message` entities register domain events (`NewChatCreatedEvent`, `NewMessageReceivedEvent`, etc.) when state changes.
 3. **Event publishing** — After persistence, command handlers call `mediator.publish()` to trigger event handlers that push to Kafka and/or WebSocket clients.
 4. **Dependency injection** — `punq` container in `logic/init.py` wires repositories, Kafka, WebSocket manager, and the mediator.
+
+### Transaction Outbox & Relay
+
+Writes are made **atomic with their event emissions** using the [Transaction Outbox](https://microservices.io/patterns/data/transactional-outbox.html) pattern:
+
+1. A command handler opens a MongoDB transaction (`ClientSession` → `start_transaction`), writes the business document **and** an outbox row (via `BaseOutboxRepository`) in the same transaction, then commits.
+2. A background **relay worker** (`infrastructure/outbox/relay.py`, driven by `aiojobs`) polls the `outbox` collection for unsent rows and publishes each row's payload to its Kafka topic.
+3. After a row is delivered, the relay marks it sent. Delivery is **at-least-once** — a crash between send and mark may re-send a row once; downstream consumers dedupe on the stable `event_id` key.
+
+This decouples write latency from Kafka availability: a Kafka outage only delays delivery, it never drops events. The event handlers under `logic/events/messages.py` now write to the outbox instead of sending to Kafka directly.
+
+> ⚠️ **MongoDB must run as a single-node replica set** for transactions to work. The compose stack starts Mongo with `--replSet rs0` and a one-shot `init-mongo` service runs `rs.initiate()`. The connection URI in `.env` must include `?replicaSet=rs0`.
+
+### Observability (Prometheus)
+
+`/metrics` is exposed on the app (HTTP `*_requests`/`*_requests_duration` from `prometheus-fastapi-instrumentator`) plus custom outbox/Kafka counters defined in `infrastructure/metrics.py`:
+
+- `outbox_published_total` — rows forwarded to Kafka by the relay
+- `outbox_publish_errors_total` — relay send failures
+- `outbox_pending` — rows currently unsent in the outbox
+- `kafka_messages_sent_total` — messages the relay sent to Kafka
+
+Run `make prometheus` to bring up a Prometheus container that scrapes `main-app:8000/metrics` (UI at `:${PROMETHEUS_PORT}`).
 
 
 
@@ -194,6 +218,9 @@ Settings are loaded from environment variables via `settings/config.py`:
 | `new_message_received_topic`  | `new-messages`            | Topic for new messages  |
 | `chat_deleted_topic`          | `chat-deleted-topic`      | Topic for deleted chats |
 | `new_listener_added_topic`    | `listener-added-topic`    | Topic for new listeners |
+| `MONGODB_OUTBOX_COLLECTION`   | `outbox`                    | Outbox collection (relay source) |
+| `OUTBOX_RELAY_POLL_INTERVAL`  | `1.0`                       | Seconds between relay polls |
+| `PROMETHEUS_PORT`             | `9090`                      | Prometheus server port (Docker) |
 | `API_PORT`                    | (required in Docker)      | Host port for the app   |
 
 
@@ -225,7 +252,8 @@ Example:
 API_PORT=8000
 MONGO_DB_ADMIN_USERNAME=admin
 MONGO_DB_ADMIN_PASSWORD=admin
-MONGO_DB_CONNECTION_URI=mongodb://mongodb:27017
+MONGO_DB_CONNECTION_URI=mongodb://mongodb:27017?replicaSet=rs0
+PROMETHEUS_PORT=9090
 ```
 
 
@@ -252,6 +280,7 @@ make app        # FastAPI application
 | API docs      | [http://localhost:8000/api/docs](http://localhost:8000/api/docs) |
 | Mongo Express | [http://localhost:28081](http://localhost:28081)                 |
 | Kafka UI      | [http://localhost:8090](http://localhost:8090)                   |
+| Prometheus    | [http://localhost:9090](http://localhost:9090)                   |
 
 
 
@@ -289,12 +318,14 @@ poetry run pre-commit run --all-files
 
 | Target           | Action                          |
 | ---------------- | ------------------------------- |
-| `make all`       | Start storages + app + Kafka    |
+| `make all`       | Start storages + app + Kafka + Prometheus |
 | `make app`       | Start FastAPI container         |
-| `make storages`  | Start MongoDB stack             |
+| `make storages`  | Start MongoDB replica-set stack |
 | `make kafka`     | Start Kafka stack               |
+| `make prometheus`| Start Prometheus + scrape config |
 | `make all-down`  | Stop everything                 |
 | `make app-shell` | Shell into `main-app` container |
 | `make app-logs`  | Follow app logs                 |
+| `make prometheus-logs` | Follow Prometheus logs     |
 
 

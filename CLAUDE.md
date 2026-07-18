@@ -62,18 +62,33 @@ poetry run pre-commit run --all-files
 - `make all-down` / `app-down` / `storages-down` / `kafka-down`
 - `make app-shell` / `make app-logs`
 
-Service URLs (after `make all`): API docs `http://localhost:8000/api/docs`, Mongo Express `:28081`, Kafka UI `:8090`.
+Service URLs (after `make all`): API docs `http://localhost:8000/api/docs`, Mongo Express `:28081`, Kafka UI `:8090`, Prometheus `:9090`. Metrics at `GET /metrics`.
 
 ## Known gotchas / things to verify before assuming
 
-- **MongoDB transaction caveat**: `app/infrastructure/repositories/messages/mongo.py` uses `motor` operations. Real multi-document **transactions** require MongoDB to run as a **replica set** (not a standalone). The `docker_compose/storages.yaml` MongoDB is currently a standalone — if you add session/transaction-based writes, you must convert it to a single-node replica set (`rs.initiate`) or they will fail.
-- **Broker→WebSocket consumer loop is not wired**: `KafkaMessageBroker` defines consume/relay behavior, but the consumer that pushes broker messages to WebSocket clients is not started in the app lifespan (`app/application/api/lifespan.py` only starts/stops the broker). The `NewMessageReceivedFromBrokerEvent`/`...Handler` path exists but is currently dead unless something starts consuming.
-- **Event handlers run inline in the request**: `mediator.publish()` triggers handlers synchronously within the request. Handlers that send to Kafka couple write latency to broker availability — keep this in mind if you add work there.
+- **MongoDB runs as a replica set**: `docker_compose/storages.yaml` starts Mongo with `--replSet rs0` plus a one-shot `init-mongo` service that runs `rs.initiate()`. Command handlers open a `ClientSession` transaction when persisting, so `.env` must use `MONGO_DB_CONNECTION_URI=mongodb://mongodb:27017?replicaSet=rs0`. **If you swap Mongo back to a standalone, the transaction-based writes will fail.**
+- **Writes go through a Transaction Outbox, not Kafka directly**: `logic/events/messages.py` handlers now save domain events to `BaseOutboxRepository` (the outbox collection). A background **relay** (`infrastructure/outbox/relay.py`) polls the outbox and publishes to Kafka. So a Kafka outage delays but never drops events; write latency is decoupled from broker availability.
+- **Broker→WebSocket consumer loop is not wired**: `KafkaMessageBroker` defines consume/relay behavior, but the consumer that pushes broker messages to WebSocket clients is not started in the app lifespan (`app/application/api/lifespan.py` only starts/stops the broker + relay). The `NewMessageReceivedFromBrokerEvent`/`...Handler` path exists but is currently dead unless something starts consuming.
 - **WebSocket manager** is a singleton `ConnectionManager` resolved from the container and used by both event handlers (push to clients) and the WS router (`app/application/api/messages/websockets/messages.py`).
 - **Tests use in-memory repos** via `app/test/fixtures.py` and `app/test/application/api/conftest.py`. New repositories must be registered there (mirroring `MongoDBChatsRepository`/`MongoDBMessagesRepository`) or tests break.
+- **The relay is overridden in tests**: `init_dummy_container` registers a `_NoopOutboxRelay` (and swaps Mongo for memory). The lifespan helpers (`init_message_broker`/`close_message_broker`/`start_relay`) resolve the container through `app.dependency_overrides[init_container]`, so the conftest override also drives the broker + relay to test doubles — no Kafka needed to run `pytest`.
 
 ## Before modifying
 
 1. Read `app/logic/init.py` to see how the piece you're touching is wired.
 2. Respect the `base`/`mongo`/`memory` repository split — never import Motor directly in domain/logic layers.
 3. Keep domain entities free of infrastructure imports; keep `logic/` depending only on `domain/` and `infrastructure/` interfaces.
+
+## Agent skills
+
+### Issue tracker
+
+Issues and specs live as local markdown files under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Five canonical roles: needs-triage, needs-info, ready-for-agent, ready-for-human, wontfix. See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: one `CONTEXT.md` at the repo root plus `docs/adr/`. See `docs/agents/domain.md`.

@@ -58,6 +58,10 @@ class Chat(BaseEntity):
         self.listeners.add(listener)
         self.register_event(ListenerAddedEvent(listener_oid=listener.oid))
 
+    def register_telegram_listener(self, telegram_chat_id: str) -> None:
+        listener = ChatListener(oid=telegram_chat_id)
+        self.add_listener(listener)
+
     def add_message(self, message: Message):
         self.messages.add(message)
         self.register_event(

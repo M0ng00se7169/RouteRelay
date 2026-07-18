@@ -1,8 +1,9 @@
+from contextlib import asynccontextmanager
 from dataclasses import dataclass
-
-from infrastructure.repositories.messages.base import (
-    BaseChatsRepository,
-    BaseMessagesRepository,
+from typing import (
+    AsyncIterator,
+    Optional,
+    Sequence,
 )
 
 from domain.entities.messages import (
@@ -10,110 +11,167 @@ from domain.entities.messages import (
     ChatListener,
     Message,
 )
-from domain.values.messages import (
-    Text,
-    Title,
+from domain.values.messages import Title
+from domain.events.base import BaseEvent
+from infrastructure.outbox.base import BaseOutboxRepository
+from infrastructure.outbox.session import SessionProvider
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
 )
-from logic.commands.base import (
-    BaseCommand,
-    CommandHandler,
-)
-from logic.exceptions.messages import (
-    ChatNotFoundException,
-    ChatWithThatTitleAlreadyExistsException,
-)
+from logic.exceptions.messages import ChatWithThatTitleAlreadyExistsException
+from logic.mediator.base import EventMediator
 
 
-@dataclass(frozen=True)
-class CreateChatCommand(BaseCommand):
+@asynccontextmanager
+async def _maybe_transaction(
+    session_provider: SessionProvider,
+) -> AsyncIterator[Optional[object]]:
+    session = await session_provider()
+    if session is None:
+        yield None
+    else:
+        async with session.start_transaction():
+            yield session
+
+
+@dataclass
+class CreateChatCommand:
     title: str
 
 
-@dataclass(frozen=True)
-class CreateChatCommandHandler(CommandHandler[CreateChatCommand, Chat]):
+@dataclass
+class CreateChatCommandHandler:
+    _mediator: EventMediator
     chats_repository: BaseChatsRepository
+    outbox_repository: BaseOutboxRepository
+    session_provider: SessionProvider
 
     async def handle(self, command: CreateChatCommand) -> Chat:
-        if await self.chats_repository.check_chat_exists_by_title(command.title):
-            raise ChatWithThatTitleAlreadyExistsException(command.title)
-
-        title = Title(value=command.title)
-
-        new_chat = Chat.create_chat(title=title)
-
-        await self.chats_repository.add_chat(new_chat)
-        await self._mediator.publish(new_chat.pull_events())
+        chat_exists = await self.chats_repository.check_chat_exists_by_title(title=command.title)
+        if chat_exists:
+            raise ChatWithThatTitleAlreadyExistsException(title=command.title)
+        new_chat = Chat.create_chat(title=Title(command.title))
+        events = new_chat.pull_events()
+        async with _maybe_transaction(self.session_provider) as session:
+            await self.chats_repository.add_chat(new_chat, session=session)
+            await self.outbox_repository.save_events(events, session=session)
+        await self._mediator.publish(events)
         return new_chat
 
 
-@dataclass(frozen=True)
-class CreateMessageCommand(BaseCommand):
-    text: str
+@dataclass
+class GetChatDetailQuery:
     chat_oid: str
 
 
-@dataclass(frozen=True)
-class CreateMessageCommandHandler(CommandHandler[CreateMessageCommand, Chat]):
-    messages_repository: BaseMessagesRepository
+@dataclass
+class GetChatDetailQueryHandler:
     chats_repository: BaseChatsRepository
 
+    async def handle(self, query: GetChatDetailQuery) -> Chat:
+        return await self.chats_repository.get_chat_by_oid(query.chat_oid)
+
+
+@dataclass
+class CreateMessageCommand:
+    chat_oid: str
+    text: str
+
+
+@dataclass
+class CreateMessageCommandHandler:
+    _mediator: EventMediator
+    messages_repository: BaseMessagesRepository
+    chats_repository: BaseChatsRepository
+    outbox_repository: BaseOutboxRepository
+    session_provider: SessionProvider
+
     async def handle(self, command: CreateMessageCommand) -> Message:
-        chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
-
-        if not chat:
-            raise ChatNotFoundException(chat_oid=command.chat_oid)
-
-        message = Message(text=Text(value=command.text), chat_oid=command.chat_oid)
-        chat.add_message(message)
-        await self.messages_repository.add_message(message=message)
-        await self._mediator.publish(chat.pull_events())
-
+        chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
+        message: Message = chat.add_message(message_text=command.text)
+        events = chat.pull_events()
+        async with _maybe_transaction(self.session_provider) as session:
+            await self.messages_repository.add_message(message, session=session)
+            await self.outbox_repository.save_events(events, session=session)
+        await self._mediator.publish(events)
         return message
 
 
-@dataclass(frozen=True)
-class DeleteChatCommand(BaseCommand):
+@dataclass
+class DeleteChatCommand:
     chat_oid: str
 
 
-@dataclass(frozen=True)
-class DeleteChatCommandHandler(CommandHandler[DeleteChatCommand, None]):
+@dataclass
+class DeleteChatCommandHandler:
+    _mediator: EventMediator
     chats_repository: BaseChatsRepository
+    outbox_repository: BaseOutboxRepository
+    session_provider: SessionProvider
 
     async def handle(self, command: DeleteChatCommand) -> None:
-        chat = await self.chats_repository.get_chat_by_oid(oid=command.chat_oid)
+        chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
+        chat.delete_chat()
+        events = chat.pull_events()
+        async with _maybe_transaction(self.session_provider) as session:
+            await self.chats_repository.delete_chat_by_oid(command.chat_oid, session=session)
+            await self.outbox_repository.save_events(events, session=session)
+        await self._mediator.publish(events)
 
-        if not chat:
-            raise ChatNotFoundException(chat_oid=command.chat_oid)
 
-        await self.chats_repository.delete_chat_by_oid(chat_oid=command.chat_oid)
-        chat.delete()
-        await self._mediator.publish(chat.pull_events())
+@dataclass
+class GetAllChatsListenersQuery:
+    chat_oid: str
 
 
-@dataclass(frozen=True)
-class AddTelegramListenerCommand(BaseCommand):
+@dataclass
+class GetAllChatsListenersQueryHandler:
+    chats_repository: BaseChatsRepository
+
+    async def handle(self, query: GetAllChatsListenersQuery) -> Sequence[ChatListener]:
+        return await self.chats_repository.get_all_chat_listeners(query.chat_oid)
+
+
+@dataclass
+class GetMessagesQuery:
+    chat_oid: str
+    limit: int = 50
+    offset: int = 0
+
+
+@dataclass
+class GetMessagesQueryHandler:
+    messages_repository: BaseMessagesRepository
+
+    async def handle(self, query: GetMessagesQuery) -> Sequence[Message]:
+        return await self.messages_repository.get_messages_by_chat_oid(
+            chat_oid=query.chat_oid, limit=query.limit, offset=query.offset,
+        )
+
+
+@dataclass
+class AddTelegramListenerCommand:
     chat_oid: str
     telegram_chat_id: str
 
 
-@dataclass(frozen=True)
-class AddTelegramListenerCommandHandler(CommandHandler[AddTelegramListenerCommand, ChatListener]):
+@dataclass
+class AddTelegramListenerCommandHandler:
+    _mediator: EventMediator
     chats_repository: BaseChatsRepository
+    outbox_repository: BaseOutboxRepository
+    session_provider: SessionProvider
 
-    async def handle(self, command: AddTelegramListenerCommand) -> ChatListener:
-        chat = await self.chats_repository.get_chat_by_oid(oid=command.chat_oid)
-
-        if not chat:
-            raise ChatNotFoundException(chat_oid=command.chat_oid)
-
-        listener = ChatListener(oid=command.telegram_chat_id)
-        chat.add_listener(listener)
-
-        await self.chats_repository.add_telegram_listener(
-            chat_oid=command.chat_oid,
-            telegram_chat_id=command.telegram_chat_id,
-        )
-        await self._mediator.publish(chat.pull_events())
-
-        return listener
+    async def handle(self, command: AddTelegramListenerCommand) -> None:
+        chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
+        chat.register_telegram_listener(telegram_chat_id=command.telegram_chat_id)
+        events = chat.pull_events()
+        async with _maybe_transaction(self.session_provider) as session:
+            await self.chats_repository.add_telegram_listener(
+                chat_oid=command.chat_oid,
+                telegram_chat_id=command.telegram_chat_id,
+                session=session,
+            )
+            await self.outbox_repository.save_events(events, session=session)
+        await self._mediator.publish(events)
