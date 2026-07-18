@@ -29,6 +29,8 @@
 - Kafka + Zookeeper + Kafka UI (port 8090)
 - FastAPI app (port from `API_PORT` in `.env`)
 - Prometheus (port from `PROMETHEUS_PORT` in `.env`)
+- Loki + Promtail (log aggregation, Loki port from `LOKI_PORT` in `.env`)
+- Grafana (dashboards, port from `GRAFANA_PORT` in `.env`)
 
 ---
 
@@ -69,16 +71,35 @@ This decouples write latency from Kafka availability: a Kafka outage only delays
 
 > ⚠️ **MongoDB must run as a single-node replica set** for transactions to work. The compose stack starts Mongo with `--replSet rs0` and a one-shot `init-mongo` service runs `rs.initiate()`. The connection URI in `.env` must include `?replicaSet=rs0`.
 
-### Observability (Prometheus)
+### Observability
 
-`/metrics` is exposed on the app (HTTP `*_requests`/`*_requests_duration` from `prometheus-fastapi-instrumentator`) plus custom outbox/Kafka counters defined in `infrastructure/metrics.py`:
+#### Metrics (Prometheus)
+
+`/metrics` is exposed on the app (HTTP `*_requests`/`*_requests_duration` from `prometheus-fastapi-instrumentator` → `http_requests_total`, `http_request_duration_seconds_bucket`) plus custom outbox/Kafka counters defined in `infrastructure/metrics.py`:
 
 - `outbox_published_total` — rows forwarded to Kafka by the relay
 - `outbox_publish_errors_total` — relay send failures
 - `outbox_pending` — rows currently unsent in the outbox
 - `kafka_messages_sent_total` — messages the relay sent to Kafka
 
-Run `make prometheus` to bring up a Prometheus container that scrapes `main-app:8000/metrics` (UI at `:${PROMETHEUS_PORT}`).
+Run `make prometheus` to bring up a Prometheus container that scrapes `main-app:8000/metrics` (UI at `:${PROMETHEUS_PORT}`). Prometheus also **self-scrapes** `localhost:9090` so the `up` metric covers the server itself. TSDB data is persisted in the `prometheus-data` volume.
+
+#### Logs (Loki + Promtail)
+
+The app emits **JSON-structured log lines** (`level`, `logger`, `message`) — configured in `app/infrastructure/logging_config.py` and wired into `create_app`. Promtail tails the `main-app` container's Docker json-file stream, parses the inner JSON, and pushes to Loki with a `container=main-app` label. Grafana's `kafka-chat-overview` dashboard has a live logs panel querying `{container="main-app"}`.
+
+> ⚠️ **Promtail tails Docker json-file logs only.** If the app is run with `make app` *without* the observability stack (`make all`), or via the local-dev command outside Docker, Promtail will not see its logs (Host logging driver may differ). Bring up the stack with `make all` for log aggregation to work.
+
+#### Dashboards (Grafana)
+
+`make all` (or `make observability`) starts Grafana with provisioned datasources (Prometheus + Loki) and the **`kafka-chat-overview`** dashboard, which shows:
+
+- HTTP request rate by handler (`rate(http_requests_total[1m])`)
+- HTTP latency p95 by handler
+- Outbox pending / published / errors and Kafka messages sent
+- Live app logs (`{container="main-app"}`)
+
+Log in with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` from `.env` (UI at `:${GRAFANA_PORT}`).
 
 
 
@@ -127,9 +148,16 @@ fastapi_examples/
 ├── docker_compose/
 │   ├── app.yaml
 │   ├── storages.yaml
-│   └── kafka.yaml
+│   ├── kafka.yaml
+│   ├── prometheus.yaml
+│   ├── observability.yaml        # Loki + Promtail + Grafana
+│   ├── loki/loki-config.yaml
+│   ├── promtail/promtail-config.yaml
+│   └── grafana/provisioning/     # datasources + kafka-chat-overview dashboard
+├── loadtest/                     # Locust load-test harness
 ├── Dockerfile
 ├── Makefile
+├── prometheus.yml
 ├── pyproject.toml
 └── poetry.lock
 ```
@@ -221,6 +249,10 @@ Settings are loaded from environment variables via `settings/config.py`:
 | `MONGODB_OUTBOX_COLLECTION`   | `outbox`                    | Outbox collection (relay source) |
 | `OUTBOX_RELAY_POLL_INTERVAL`  | `1.0`                       | Seconds between relay polls |
 | `PROMETHEUS_PORT`             | `9090`                      | Prometheus server port (Docker) |
+| `LOKI_PORT`                   | `3100`                      | Loki HTTP port (Docker) |
+| `GRAFANA_PORT`                | `3000`                      | Grafana port (Docker) |
+| `GRAFANA_ADMIN_USER`          | `admin`                     | Grafana admin login |
+| `GRAFANA_ADMIN_PASSWORD`      | `admin`                     | Grafana admin password |
 | `API_PORT`                    | (required in Docker)      | Host port for the app   |
 
 
@@ -254,6 +286,10 @@ MONGO_DB_ADMIN_USERNAME=admin
 MONGO_DB_ADMIN_PASSWORD=admin
 MONGO_DB_CONNECTION_URI=mongodb://mongodb:27017?replicaSet=rs0
 PROMETHEUS_PORT=9090
+LOKI_PORT=3100
+GRAFANA_PORT=3000
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=admin
 ```
 
 
@@ -281,6 +317,8 @@ make app        # FastAPI application
 | Mongo Express | [http://localhost:28081](http://localhost:28081)                 |
 | Kafka UI      | [http://localhost:8090](http://localhost:8090)                   |
 | Prometheus    | [http://localhost:9090](http://localhost:9090)                   |
+| Loki          | [http://localhost:3100](http://localhost:3100)                   |
+| Grafana       | [http://localhost:3000](http://localhost:3000)                   |
 
 
 
@@ -309,6 +347,27 @@ poetry run pre-commit install
 poetry run pre-commit run --all-files
 ```
 
+### 7. Load testing (Locust)
+
+`loadtest/locustfile.py` drives the API to exercise the metrics behind the
+`kafka-chat-overview` dashboard. Install and run while the stack is up:
+
+```bash
+pip install -r loadtest/requirements.txt
+locust -f loadtest/locustfile.py --host http://localhost:8000 \
+       --users 50 --spawn-rate 5 --run-time 5m --headless
+```
+
+See `loadtest/README.md` for the web-UI mode and what endpoints it hits. Watch
+`http_requests_total` and the outbox counters move in Grafana.
+
+### 8. Observability stack
+
+`make all` brings up Loki, Promtail, and Grafana alongside the app. Grafana is
+pre-provisioned with Prometheus + Loki datasources and the `kafka-chat-overview`
+dashboard, so metrics and `{container="main-app"}` logs are visible immediately
+after login (credentials from `.env`).
+
 ---
 
 
@@ -316,16 +375,19 @@ poetry run pre-commit run --all-files
 ## Makefile Commands
 
 
-| Target           | Action                          |
-| ---------------- | ------------------------------- |
-| `make all`       | Start storages + app + Kafka + Prometheus |
-| `make app`       | Start FastAPI container         |
-| `make storages`  | Start MongoDB replica-set stack |
-| `make kafka`     | Start Kafka stack               |
-| `make prometheus`| Start Prometheus + scrape config |
-| `make all-down`  | Stop everything                 |
-| `make app-shell` | Shell into `main-app` container |
-| `make app-logs`  | Follow app logs                 |
-| `make prometheus-logs` | Follow Prometheus logs     |
+| Target                | Action                          |
+| --------------------- | ------------------------------- |
+| `make all`            | Start storages + app + Kafka + Prometheus + observability (Loki/Promtail/Grafana) |
+| `make app`            | Start FastAPI container         |
+| `make storages`       | Start MongoDB replica-set stack |
+| `make kafka`          | Start Kafka stack               |
+| `make prometheus`     | Start Prometheus + scrape config |
+| `make observability`  | Start Loki + Promtail + Grafana only |
+| `make all-down`       | Stop everything                 |
+| `make observability-down` | Stop observability stack    |
+| `make app-shell`      | Shell into `main-app` container |
+| `make app-logs`       | Follow app logs                 |
+| `make prometheus-logs`| Follow Prometheus logs          |
+| `make observability-logs` | Follow observability logs   |
 
 

@@ -6,9 +6,13 @@ services:
       - '${PROMETHEUS_PORT}:9090'
     volumes:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus-data:/prometheus
     networks:
       - backend
 
 networks:
   backend:
     driver: bridge
+
+volumes:
+  prometheus-data:
