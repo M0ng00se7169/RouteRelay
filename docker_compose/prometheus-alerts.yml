@@ -16,6 +16,12 @@
 # - The consumer-down rule is guarded by `up{job='kafka-chat-api'} == 1` so a
 #   dead app (target down, no fresh samples) does not page for the consumer
 #   being down on top of it.
+# - KafkaConsumerReconnecting uses `increase(...[15m]) > 0` as a recency
+#   signal: reconnects are self-healing (the loop retries with exponential
+#   backoff, O-1 fix), so this alert deliberately tolerates a single broker
+#   restart — it fires while there was at least one reconnect in the last
+#   15 minutes and clears ~15m after the last one. Actual consumer death is
+#   KafkaConsumerDown's job; if this alert becomes noisy, raise the window.
 groups:
   - name: kafka-chat
     rules:
@@ -43,6 +49,14 @@ groups:
         annotations:
           summary: 'Kafka consumer loop is down while the app is up'
           description: 'kafka_consumer_up is 0 while the kafka-chat-api target is healthy — inbound broker messages are not reaching the WebSocket fan-out.'
+
+      - alert: KafkaConsumerReconnecting
+        expr: increase(kafka_consumer_reconnects_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Kafka consumer reconnected recently ({{ $value }} in 15m)'
+          description: 'The consumer loop reconnected to Kafka at least once in the last 15 minutes — the broker stream died (restart, network blip) or ended cleanly. Delivery self-heals via exponential backoff; if this repeats, investigate Kafka stability. Consumer death is covered by KafkaConsumerDown.'
 
       - alert: WSBroadcastFailures
         expr: rate(ws_broadcast_failures_total[5m]) > 0
