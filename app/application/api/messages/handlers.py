@@ -40,6 +40,7 @@ from logic.queries.messages import (
     GetChatDetailQuery,
     GetMessagesQuery,
 )
+from settings.security import get_current_user
 
 
 router = APIRouter(tags=['Chat'])
@@ -57,6 +58,7 @@ router = APIRouter(tags=['Chat'])
 async def create_chat_handler(
         schema: CreateChatRequestSchema,
         container: Container = Depends(init_container),
+        _user: str = Depends(get_current_user),
 ):
     """
     Create a new chat based on the provided request schema.
@@ -86,6 +88,7 @@ async def create_message_handler(
         chat_oid: str,
         schema: CreateMessageSchema,
         container: Container = Depends(init_container),
+        _user: str = Depends(get_current_user),
 ) -> CreateMessageResponseSchema:
     mediator: Mediator = container.resolve(Mediator)
 
@@ -189,6 +192,7 @@ async def get_all_chats_handler(
 async def delete_chat_handler(
     chat_oid: str,
     container: Container = Depends(init_container),
+    _user: str = Depends(get_current_user),
 ):
     mediator: Mediator = container.resolve(Mediator)
 
@@ -210,6 +214,7 @@ async def add_chat_listener_handler(
     chat_oid: str,
     schema: AddTelegramListenerSchema,
     container: Container = Depends(init_container),
+    _user: str = Depends(get_current_user),
 ) -> AddTelegramListenerResponseSchema:
     mediator: Mediator = container.resolve(Mediator)
 
