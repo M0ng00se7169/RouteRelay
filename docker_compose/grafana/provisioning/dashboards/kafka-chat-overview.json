@@ -44,7 +44,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "reqps" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
       "id": 22,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "HTTP 5xx error rate by handler",
@@ -143,6 +143,53 @@
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 40 },
+      "id": 7,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "title": "Prometheus up (self-scrape + app)",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "up" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "min": 0,
+          "max": 1,
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "closed", "index": 0 }, "1": { "text": "open / half-open", "index": 1 } } }
+          ],
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null }, { "color": "red", "value": 1 } ] }
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 40 },
+      "id": 23,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "title": "Circuit breaker state by dependency",
+      "type": "stat",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "circuit_breaker_state", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short", "min": 0 }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "id": 24,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "title": "Circuit breaker rejections (rate) — kafka vs mongo",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum(increase(circuit_breaker_rejected_total[15m])) by (name)", "legendFormat": "{{name}}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 56 },
       "id": 12,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "Kafka consumer up (liveness heartbeat)",
@@ -154,19 +201,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
-      "id": 7,
-      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
-      "title": "Prometheus up (self-scrape + app)",
-      "type": "timeseries",
-      "targets": [
-        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "up" }
-      ]
-    },
-    {
-      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
-      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 48 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 64 },
       "id": 13,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "WebSocket connections active",
@@ -178,7 +213,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 48 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 64 },
       "id": 14,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "WebSocket connects / disconnects (rate)",
@@ -191,7 +226,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 56 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 72 },
       "id": 15,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "WebSocket broadcast rate & failures",
@@ -204,7 +239,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "s" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 56 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 72 },
       "id": 16,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "WebSocket broadcast latency p95",
@@ -216,7 +251,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 64 },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 80 },
       "id": 17,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "Mediator events published by class",
@@ -228,7 +263,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 64 },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 80 },
       "id": 18,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "Mediator commands & queries handled",
@@ -241,7 +276,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 72 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 88 },
       "id": 19,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "DB operation errors by operation & collection",
@@ -253,7 +288,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
-      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 80 },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 96 },
       "id": 20,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
       "title": "Telegram notifications sent & failed",
@@ -266,7 +301,7 @@
     {
       "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
       "fieldConfig": { "defaults": { "unit": "short", "mappings": [ { "type": "value", "options": { "1": { "text": "up", "index": 0 } } } ] }, "overrides": [] },
-      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 88 },
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 104 },
       "id": 21,
       "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" }, "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
       "title": "Deployed version (application_info)",
@@ -278,7 +313,7 @@
     {
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "fieldConfig": { "defaults": {}, "overrides": [] },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 92 },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 108 },
       "id": 8,
       "options": {
         "showLabels": false,
@@ -337,6 +372,6 @@
   "timezone": "",
   "title": "kafka-chat-overview",
   "uid": "kafka-chat-overview",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
