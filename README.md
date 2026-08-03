@@ -143,6 +143,7 @@ The app emits **JSON-structured log lines** (`level`, `logger`, `message`) — c
 - HTTP request rate by handler (`rate(http_requests_total[1m])`)
 - HTTP latency p95 by handler
 - Outbox pending / published / errors and Kafka messages sent
+- Circuit breaker state per dependency (closed / open) and rejection rate by breaker name
 - Live app logs (`{container="main-app"}`)
 
 Log in with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` from `.env` (UI at `:${GRAFANA_PORT}`).

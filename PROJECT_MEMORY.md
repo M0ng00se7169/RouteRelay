@@ -80,6 +80,15 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — Grafana breaker panels.** `kafka-chat-overview` gained a new row after the outbox
+  errors panels: a `stat` panel (breaker state per `name`, mapped 0=closed / 1=open-or-half-open,
+  red threshold at open) and a timeseries of `sum(increase(circuit_breaker_rejected_total[15m]))
+  by (name)` — rejections by breaker, which is exactly the alert's expr. Lower panels shifted down
+  a row; dashboard `version` bumped to 2. Verified live: provisioned on `docker restart grafana`,
+  both panel queries return data through the datasource API. NB: this stack's Grafana publishes on
+  an **ephemeral host port** (GRAFANA_PORT unset at container creation → Docker random) — set
+  `GRAFANA_PORT` in `.env` and recreate for a stable port. Grafana 11 datasource queries go
+  through `/api/datasources/uid/<uid>/resources/...` (the old `/proxy` path is gone).
 - **2026-09-25 — Kafka outage runbook.** `docs/runbooks/kafka-outage.md`: triage + recovery built
   from the drill's observed timeline (detection latency ≈ aiokafka 40s request timeout × threshold
   5 ≈ 3.5 min; errors freeze once the breaker opens — `OutboxRelayFailing` quiet while
