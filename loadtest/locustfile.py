@@ -1,4 +1,5 @@
 import logging
+import os
 import uuid
 
 from faker import Faker
@@ -12,6 +13,8 @@ from locust import (
 logger = logging.getLogger(__name__)
 
 API_BASE = '/chat'
+AUTH_USERNAME = os.getenv('AUTH_USERNAME', 'admin')
+AUTH_PASSWORD = os.getenv('AUTH_PASSWORD', 'admin')
 fake = Faker()
 
 
@@ -25,6 +28,19 @@ class KafkaChatUser(FastHttpUser):
 	wait_time = between(1, 3)
 
 	def on_start(self) -> None:
+		# Write endpoints (POST/DELETE) require a Bearer JWT: fetch one via the
+		# OAuth2 password flow and attach it to every request.
+		resp = self.client.post(
+			'/auth/token',
+			data={'username': AUTH_USERNAME, 'password': AUTH_PASSWORD},
+			name='POST /auth/token',
+		)
+		if resp.status_code == 200:
+			self.auth_headers = {'Authorization': f"Bearer {resp.json()['access_token']}"}
+		else:
+			self.auth_headers = {}
+			logger.error('Token acquisition failed (%s); write requests will 401', resp.status_code)
+
 		# The API expects {'title': ...} and answers 201 Created. Titles must be
 		# unique (duplicates are rejected with 400), so each user mints one with
 		# a random suffix; faker supplies the readable part.
@@ -34,6 +50,7 @@ class KafkaChatUser(FastHttpUser):
 				f'{API_BASE}/',
 				json={'title': title},
 				name='POST /chat/',
+				headers=self.auth_headers,
 			)
 			if resp.status_code == 201:
 				self.chat_id = resp.json().get('oid')
@@ -54,6 +71,7 @@ class KafkaChatUser(FastHttpUser):
 			f'{API_BASE}/{self.chat_id}/messages',
 			json={'text': fake.sentence()},
 			name='POST /chat/{id}/messages',
+			headers=self.auth_headers,
 		)
 
 	@task(1)
