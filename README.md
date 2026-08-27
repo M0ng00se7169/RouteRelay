@@ -86,6 +86,7 @@ This decouples write latency from Kafka availability: a Kafka outage only delays
 - `kafka_consumer_malformed_total` — consumed messages that failed validation (no chat_oid/message)
 - `kafka_consumer_up` — 1 while the consumer loop task is running (stays 1 through reconnect backoff), 0 after graceful stop or any other task exit
 - `kafka_consumer_reconnects_total{topic}` — reconnection attempts after the broker stream died or exited cleanly (exponential-backoff retry loop)
+- `circuit_breaker_state{name}` / `circuit_breaker_rejected_total{name}` — per-dependency circuit breaker state (`mongo` persistence path, `kafka` outbox relay) and fail-fast rejections while a breaker is open
 - `ws_connections_active` / `ws_connections_accepted_total` / `ws_connections_removed_total` — live WebSocket connection tracking (gauge recomputed from the manager's own map on every accept/remove)
 - `ws_messages_broadcast_total` / `ws_broadcast_failures_total` — fan-out successes and per-socket send failures (one dead socket no longer aborts the fan-out)
 - `ws_broadcast_duration_seconds` — fan-out latency, including failed per-socket attempts
@@ -102,10 +103,14 @@ to the registry module — never ad-hoc in feature modules.
 #### Alerts (Prometheus rules)
 
 `docker_compose/prometheus-alerts.yml` (loaded via `rule_files` in
-`prometheus.yml`) defines five alerts: `OutboxBacklogGrowing`
+`prometheus.yml`) defines six alerts: `OutboxBacklogGrowing`
 (`outbox_pending > 200 for 5m` — calibrated from a Locust baseline: 50 users,
 ~16 msg/s produced `outbox_pending` max=35, so 200 is ~6x the observed peak and
-2x the relay's per-tick drain capacity), `OutboxRelayFailing`, `KafkaConsumerDown`
+2x the relay's per-tick drain capacity), `OutboxRelayFailing`,
+`OutboxRelayCircuitOpen` (`increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0`
+— the relay's 'kafka' circuit breaker is skipping outbox batches after repeated
+Kafka failures; recovery via the half-open probe is automatic),
+`KafkaConsumerDown`
 (critical; guarded by the app's `up` so a dead target doesn't double-page),
 `KafkaConsumerReconnecting` (`increase(kafka_consumer_reconnects_total[15m]) > 0`
 — recency signal for broker stream death; reconnects self-heal via backoff), and

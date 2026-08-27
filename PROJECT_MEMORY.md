@@ -80,6 +80,14 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — Alert on relay breaker rejections.** New `OutboxRelayCircuitOpen` (warning) in
+  `docker_compose/prometheus-alerts.yml`:
+  `increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0` — fills the gap where
+  `OutboxRelayFailing` goes quiet precisely because the breaker stopped the doomed sends
+  (gate rejections only land in the breaker counter). Alert count 5 → 6. Synced:
+  `docs/architecture.md` (added the missing `circuit_breaker_state/rejected_total` registry rows
+  + alert table), `README.md` (metric list + alert count), `infrastructure/metrics.py` comment
+  (name label now documents 'mongo' + 'kafka').
 - **2026-09-25 — O-2 fixed: outbox relay guarded by a `'kafka'` circuit breaker.**
   `infrastructure/outbox/relay.py` (optional `circuit_breaker` field; open-state pre-check skips
   the batch — rows stay unsent; sends wrapped in `breaker.call()`; `CircuitOpenError` mid-batch
