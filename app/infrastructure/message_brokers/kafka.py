@@ -39,7 +39,13 @@ class KafkaMessageBroker(BaseMessageBroker):
 	async def send_message(self, topic: str, key: bytes, value: bytes):
 		if self.producer is None:
 			raise RuntimeError('KafkaMessageBroker.send_message called before start()')
-		await self.producer.send(topic=topic, key=key, value=value)
+		# send() only buffers and returns a delivery future; awaiting THAT future
+		# is what surfaces broker failures (KafkaTimeoutError etc.). Without it a
+		# dead broker looks healthy: rows get marked sent, delivery errors vanish,
+		# buffered rows die with the process (at-most-once). send_and_wait awaits
+		# the future, restoring the relay's documented at-least-once contract and
+		# giving the O-2 circuit breaker real failures to count.
+		await self.producer.send_and_wait(topic=topic, key=key, value=value)
 
 	async def close(self):
 		if self.producer is not None:

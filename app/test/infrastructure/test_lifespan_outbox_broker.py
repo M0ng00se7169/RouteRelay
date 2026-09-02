@@ -167,14 +167,21 @@ async def test_kafka_start_creates_producer_and_consumer():
 
 
 @pytest.mark.asyncio
-async def test_kafka_send_message_uses_producer():
+async def test_kafka_send_message_awaits_producer_ack():
+	# Regression (live drill 2026-09-25): send_message used to await only
+	# producer.send(), which merely buffers and returns a delivery future —
+	# broker failures never surfaced, rows were marked sent against a dead
+	# Kafka, and buffered rows died with the process (at-most-once). Awaiting
+	# the ack is what the relay's at-least-once contract and the O-2 circuit
+	# breaker (real failures to count) depend on.
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	producer = AsyncMock()
 	broker.producer = producer
 
 	await broker.send_message(key=b'k', topic='t', value=b'msg')
 
-	producer.send.assert_awaited_once_with(topic='t', key=b'k', value=b'msg')
+	producer.send_and_wait.assert_awaited_once_with(topic='t', key=b'k', value=b'msg')
+	producer.send.assert_not_awaited()
 
 
 @pytest.mark.asyncio
