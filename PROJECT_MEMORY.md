@@ -80,6 +80,15 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — Live fire drill found+fixed: producer sends were not awaiting the ack.**
+  `KafkaMessageBroker.send_message` now uses `producer.send_and_wait()` (was `send()`, which only
+  buffers and returns a delivery future): broker failures never surfaced, outbox rows were marked
+  sent against a DEAD Kafka (at-most-once, buffered rows lost on restart), and the `'kafka'`
+  breaker had no failures to count. Regression test pins the contract
+  (`test/infrastructure/test_lifespan_outbox_broker.py`). Verified end-to-end in the live stack:
+  breaker opened after 5 consecutive real failures, `OutboxRelayCircuitOpen` fired in Prometheus,
+  Kafka restart → half-open probe closed the breaker and drained the outbox. Note: the alert's
+  expr only sees data once a breaker opens (labelled series are created lazily).
 - **2026-09-25 — Alert on relay breaker rejections.** New `OutboxRelayCircuitOpen` (warning) in
   `docker_compose/prometheus-alerts.yml`:
   `increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0` — fills the gap where
