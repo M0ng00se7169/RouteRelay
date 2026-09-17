@@ -1,0 +1,2 @@
+Method,Name,Error,Occurrences,First Seen,Last Seen
+POST,POST /chat/,LocustBadStatusCode(code=500),19,2026-09-17T15:55:37Z,2026-09-17T15:55:40Z

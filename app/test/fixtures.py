@@ -1,14 +1,118 @@
-from infrastructure.repositories.messages.base import BaseChatsRepository
-from infrastructure.repositories.messages.memory import MemoryChatRepository
-from logic.init import init_container
+import asyncio
+from unittest.mock import AsyncMock
+
+from infrastructure.message_brokers.base import BaseMessageBroker
+from infrastructure.outbox.base import BaseOutboxRepository
+from infrastructure.outbox.memory import MemoryOutboxRepository
+from infrastructure.outbox.relay import OutboxRelay
+from infrastructure.outbox.session import SessionProvider
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
+from infrastructure.repositories.messages.memory import (
+    MemoryChatRepository,
+    MemoryMessagesRepository,
+)
 from punq import (
     Container,
     Scope,
 )
 
+from logic.init import (
+    build_mediator,
+    init_container,
+)
+from logic.mediator.base import (
+    EventMediator,
+    Mediator,
+)
+from settings.config import Config
+
+
+class _NullSessionProvider(SessionProvider):
+	async def __call__(self):
+		return None
+
+
+class _NoopOutboxRelay(OutboxRelay):
+	"""Relay used in tests: does nothing instead of polling/forwarding to Kafka."""
+
+	async def run(self) -> None:
+		return None
+
+	async def _tick(self) -> None:
+		return None
+
+
+async def _dummy_consumer_iterator():
+	yield {'chat_oid': 'dummy-chat-oid', 'message': 'dummy message'}
+	await asyncio.sleep(1)
+
+
+async def _dummy_start_consuming(topic: str):
+	async for message in _dummy_consumer_iterator():
+		yield message
+
+
+class DummyMessageBroker:
+	async def start(self):
+		pass
+
+	async def close(self):
+		pass
+
+	async def send_message(self, topic: str, key: bytes, value: bytes):
+		pass
+
+	def start_consuming(self, topic: str):
+		return _dummy_start_consuming(topic)
+
+	def stop_consuming(self):
+		pass
+
 
 def init_dummy_container() -> Container:
-    container = init_container()
-    container.register(BaseChatsRepository, MemoryChatRepository, scope=Scope.singleton)
+	container = init_container()
+	container.register(BaseChatsRepository, MemoryChatRepository, scope=Scope.singleton)
+	container.register(BaseMessagesRepository, MemoryMessagesRepository, scope=Scope.singleton)
+	container.register(
+		BaseMessageBroker,
+		instance=DummyMessageBroker(),
+		scope=Scope.singleton,
+	)
+	container.register(BaseOutboxRepository, MemoryOutboxRepository, scope=Scope.singleton)
+	container.register(SessionProvider, instance=_NullSessionProvider(), scope=Scope.singleton)
+	container.register(
+		OutboxRelay,
+		instance=_NoopOutboxRelay(
+			outbox_repository=container.resolve(BaseOutboxRepository),
+			message_broker=container.resolve(BaseMessageBroker),
+		),
+		scope=Scope.singleton,
+	)
 
-    return container
+	# `init_container` is @lru_cache(1) and resolves these singletons (e.g. while
+	# wiring the mediator), caching the production instances in container._singletons.
+	# punq consults that cache before registrations, so the overrides above would be
+	# shadowed by the already-cached Mongo instances. Drop the cached singletons so
+	# the next resolve rebuilds them from the overridden registrations.
+	for key in (
+		BaseChatsRepository,
+		BaseMessagesRepository,
+		BaseMessageBroker,
+		BaseOutboxRepository,
+		SessionProvider,
+		OutboxRelay,
+	):
+		container._singletons.pop(key, None)
+
+	# Rebuild the mediator against the overridden (in-memory) container so its
+	# command handlers are wired to the memory repositories.
+	mediator = build_mediator(container, container.resolve(Config))
+	container._singletons.pop(Mediator, None)
+	container._singletons.pop(EventMediator, None)
+	container.register(Mediator, instance=mediator, scope=Scope.singleton)
+	container.register(EventMediator, instance=mediator, scope=Scope.singleton)
+
+	return container

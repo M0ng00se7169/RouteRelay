@@ -1,0 +1,53 @@
+# Prometheus alert rules for the kafka-chat stack (ADR-0006, Chunk 7.2).
+#
+# Mounted into the prometheus container by docker_compose/prometheus.yaml and
+# loaded via `rule_files` in prometheus.yml. Rules are evaluated with the
+# global evaluation_interval (15s).
+#
+# Threshold notes:
+# - OutboxBacklogGrowing's 200 is CALIBRATED from the 2026-09-17 Locust baseline
+#   (50 users, ~16 msg/s sustained, 3 min: outbox_pending max=35, p95=21, avg=6.4;
+#   relay published 2864 rows with 0 errors and drained to 0 after the run).
+#   Rationale: ~6x the observed max; 2x the relay's per-tick drain capacity
+#   (batch_size=100 per 1s poll ~= 100 msg/s), so exceeding 200 requires producers
+#   to outrun the relay by >100 msg/s for the full `for` window — the unbounded-
+#   backlog scenario this alert exists for. Recalibrate after major load-profile
+#   changes (see loadtest/locustfile.py).
+# - The consumer-down rule is guarded by `up{job='kafka-chat-api'} == 1` so a
+#   dead app (target down, no fresh samples) does not page for the consumer
+#   being down on top of it.
+groups:
+  - name: kafka-chat
+    rules:
+      - alert: OutboxBacklogGrowing
+        expr: outbox_pending > 200
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Outbox backlog is growing ({{ $value }} unsent rows)'
+          description: 'outbox_pending has been above 200 for 5 minutes — the relay is not draining the outbox (Kafka down, relay crashed, or producers outpacing it).'
+
+      - alert: OutboxRelayFailing
+        expr: rate(outbox_publish_errors_total[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Outbox relay is failing to publish ({{ $value }} errors/s)'
+          description: 'The relay recorded publish errors in the last 5 minutes; failed rows stay unsent and are retried on the next tick.'
+
+      - alert: KafkaConsumerDown
+        expr: kafka_consumer_up == 0 and up{job='kafka-chat-api'} == 1
+        labels:
+          severity: critical
+        annotations:
+          summary: 'Kafka consumer loop is down while the app is up'
+          description: 'kafka_consumer_up is 0 while the kafka-chat-api target is healthy — inbound broker messages are not reaching the WebSocket fan-out.'
+
+      - alert: WSBroadcastFailures
+        expr: rate(ws_broadcast_failures_total[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'WebSocket fan-out failures ({{ $value }} failures/s)'
+          description: 'Per-socket send failures during fan-out in the last 5 minutes — clients are dropping mid-broadcast (dead sockets no longer abort the fan-out, but the failures signal client instability).'

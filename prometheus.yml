@@ -1,0 +1,19 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - /etc/prometheus/prometheus-alerts.yml
+
+scrape_configs:
+  - job_name: 'kafka-chat-api'
+    metrics_path: /metrics
+    static_configs:
+      # Prometheus does NOT substitute env vars in config files, and the target
+      # must use the app's fixed CONTAINER port (8000) on the backend network —
+      # ${API_PORT} is the host-side mapping and never resolves here.
+      - targets: ['main-app:8000']
+
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']

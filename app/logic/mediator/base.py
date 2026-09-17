@@ -6,6 +6,12 @@ from dataclasses import (
 )
 
 from domain.events.base import BaseEvent
+from infrastructure.metrics import safe_inc
+from infrastructure.metrics import (
+    mediator_commands_handled_total,
+    mediator_events_published_total,
+    mediator_queries_handled_total,
+)
 from logic.commands.base import (
     BaseCommand,
     CommandHandler,
@@ -57,6 +63,9 @@ class Mediator(EventMediator, QueryMediator, CommandMediator):
         result = []
 
         for event in events:
+            # Flow-volume counter (ADR-0006, Chunk 5.1): one increment per event
+            # dispatched, labelled by class name — a closed, small set (D3).
+            safe_inc(mediator_events_published_total, event=event.__class__.__name__)
             handlers: Iterable[EventHandler] = self.events_map[event.__class__]
             result.extend([await handler.handle(event) for handler in handlers])
 
@@ -69,7 +78,11 @@ class Mediator(EventMediator, QueryMediator, CommandMediator):
         if not handlers:
             raise CommandHandlersNotRegisteredException(command_type)
 
+        # Counted after handler resolution so an unregistered command (which
+        # raises below the .get()) is never counted as handled.
+        safe_inc(mediator_commands_handled_total, command=command_type.__name__)
         return [await handler.handle(command) for handler in handlers]
 
     async def handle_query(self, query: BaseQuery) -> QR:
+        safe_inc(mediator_queries_handled_total, query=query.__class__.__name__)
         return await self.queries_map[query.__class__].handle(query=query)

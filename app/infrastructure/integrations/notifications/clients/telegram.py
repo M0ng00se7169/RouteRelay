@@ -17,9 +17,9 @@ class TelegramNotificationClient(BaseNotificationClient):
 
     async def send(self, notification: Notification):
         await self.http_client.get(
-            url=f"{self._host}/bot{self._token}/sendMessage",
+            url=f"{self.send_url}/bot{self.bot_token}/sendMessage",
             params={
                 'chat_id': self.chat_id,
-                'text': self._format_notification(notification=notification),
+                'text': await self._format_notification(notification=notification),
             },
         )

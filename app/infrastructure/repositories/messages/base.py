@@ -25,7 +25,7 @@ class BaseChatsRepository(ABC):
         ...
 
     @abstractmethod
-    async def add_chat(self, chat: Chat) -> None:
+    async def add_chat(self, chat: Chat, session=None) -> None:
         ...
 
     @abstractmethod
@@ -33,11 +33,11 @@ class BaseChatsRepository(ABC):
         ...
 
     @abstractmethod
-    async def delete_chat_by_oid(self, chat_oid: str) -> None:
+    async def delete_chat_by_oid(self, chat_oid: str, session=None) -> None:
         ...
 
     @abstractmethod
-    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str):
+    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str, session=None):
         ...
 
     @abstractmethod
@@ -49,7 +49,7 @@ class BaseChatsRepository(ABC):
 class BaseMessagesRepository(ABC):
 
     @abstractmethod
-    async def add_message(self, message: Message) -> None:
+    async def add_message(self, message: Message, session=None) -> None:
         ...
 
     @abstractmethod

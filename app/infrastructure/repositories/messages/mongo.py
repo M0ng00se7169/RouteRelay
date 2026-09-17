@@ -49,8 +49,8 @@ class MongoDBChatsRepository(BaseChatsRepository, BaseMongoDBRepository):
     async def check_chat_exists_by_title(self, title: str) -> bool:
         return bool(await self._collection.find_one(filter={'title': title}))
 
-    async def add_chat(self, chat: Chat) -> None:
-        await self._collection.insert_one(convert_chat_entity_to_document(chat))
+    async def add_chat(self, chat: Chat, session=None) -> None:
+        await self._collection.insert_one(convert_chat_entity_to_document(chat), session=session)
 
     async def get_all_chats(self, filters: GetAllChatsFilters) -> Iterable[Chat]:
         cursor = self._collection.find().skip(filters.offset).limit(filters.limit)
@@ -64,11 +64,15 @@ class MongoDBChatsRepository(BaseChatsRepository, BaseMongoDBRepository):
 
         return chats, count
 
-    async def delete_chat_by_oid(self, chat_oid: str) -> None:
-        await self._collection.delete_one({'oid': chat_oid})
+    async def delete_chat_by_oid(self, chat_oid: str, session=None) -> None:
+        await self._collection.delete_one({'oid': chat_oid}, session=session)
 
-    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str):
-        await self._collection.update_one({'oid': chat_oid}, {'$push': {'listeners': telegram_chat_id}})
+    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str, session=None):
+        await self._collection.update_one(
+            {'oid': chat_oid},
+            {'$push': {'listeners': telegram_chat_id}},
+            session=session,
+        )
 
     async def get_all_chat_listeners(self, chat_oid: str) -> Iterable[ChatListener]:
         chat = await self.get_chat_by_oid(oid=chat_oid)
@@ -78,9 +82,10 @@ class MongoDBChatsRepository(BaseChatsRepository, BaseMongoDBRepository):
 
 @dataclass
 class MongoDBMessagesRepository(BaseMessagesRepository, BaseMongoDBRepository):
-    async def add_message(self, message: Message) -> None:
+    async def add_message(self, message: Message, session=None) -> None:
         await self._collection.insert_one(
             document=convert_message_entity_to_document(message),
+            session=session,
         )
 
     async def get_messages(self, chat_oid: str, filters: GetMessagesFilters) -> tuple[Iterable[Message], int]:

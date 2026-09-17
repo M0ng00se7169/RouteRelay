@@ -56,7 +56,11 @@ class Chat(BaseEntity):
             raise ListenerAlreadyExistsException(listener_oid=listener.oid)
 
         self.listeners.add(listener)
-        self.register_event(ListenerAddedEvent(listener_oid=listener.oid))
+        self.register_event(ListenerAddedEvent(chat_oid=self.oid, listener_oid=listener.oid))
+
+    def register_telegram_listener(self, telegram_chat_id: str) -> None:
+        listener = ChatListener(oid=telegram_chat_id)
+        self.add_listener(listener)
 
     def add_message(self, message: Message):
         self.messages.add(message)

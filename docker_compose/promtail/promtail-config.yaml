@@ -1,0 +1,40 @@
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: docker
+    docker_sd_configs:
+      - host: unix:///var/run/docker.sock
+        refresh_interval: 5s
+    relabel_configs:
+      # Restrict log collection to the chat API container only.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/main-app'
+        action: keep
+      # Expose the container name as the `container` label consumed by the
+      # Grafana dashboard's Loki logs panel.
+      - source_labels: ['__meta_docker_container_name']
+        regex: '/(.*)'
+        target_label: container
+    pipeline_stages:
+      # Decode the Docker json-file envelope to reach the inner log line.
+      - docker: {}
+      # Parse the app's JSON formatter output into structured Loki labels.
+      - json:
+          expressions:
+            level: level
+            logger: logger
+            message: message
+      - labels:
+          level:
+          logger:
+      # Fall back to the raw line if JSON parsing fails.
+      - output:
+          source: message
