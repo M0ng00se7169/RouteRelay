@@ -5,16 +5,14 @@ from time import perf_counter
 
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.metrics import (
-	safe_inc,
-	safe_observe,
-	safe_set,
-)
-from infrastructure.metrics import (
-	kafka_messages_sent_total,
-	outbox_pending,
-	outbox_publish_duration_seconds,
-	outbox_publish_errors_total,
-	outbox_published_total,
+    kafka_messages_sent_total,
+    outbox_pending,
+    outbox_publish_duration_seconds,
+    outbox_publish_errors_total,
+    outbox_published_total,
+    safe_inc,
+    safe_observe,
+    safe_set,
 )
 from infrastructure.outbox.base import BaseOutboxRepository
 

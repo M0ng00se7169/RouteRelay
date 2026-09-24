@@ -3,9 +3,9 @@ import uuid
 
 from faker import Faker
 from locust import (
-	between,
-	FastHttpUser,
-	task,
+    between,
+    FastHttpUser,
+    task,
 )
 
 

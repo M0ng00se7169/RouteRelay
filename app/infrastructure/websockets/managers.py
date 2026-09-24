@@ -16,8 +16,6 @@ from infrastructure.metrics import (
     safe_inc,
     safe_observe,
     safe_set,
-)
-from infrastructure.metrics import (
     ws_broadcast_duration_seconds,
     ws_broadcast_failures_total,
     ws_connections_accepted_total,

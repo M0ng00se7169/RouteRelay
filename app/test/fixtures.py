@@ -1,5 +1,4 @@
 import asyncio
-from unittest.mock import AsyncMock
 
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import BaseOutboxRepository

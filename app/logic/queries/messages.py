@@ -1,8 +1,10 @@
 from dataclasses import dataclass
 from typing import Iterable
 
-from infrastructure.metrics import db_operation_errors_total
-from infrastructure.metrics import safe_inc
+from infrastructure.metrics import (
+    db_operation_errors_total,
+    safe_inc,
+)
 from infrastructure.repositories.filters.messages import (
     GetAllChatsFilters,
     GetMessagesFilters,

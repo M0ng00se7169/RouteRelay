@@ -1,19 +1,22 @@
 import unittest.mock
+from test.fixtures import init_dummy_container
 
 import pytest
-from prometheus_client import REGISTRY
-from punq import Scope
-
-from domain.events.messages import ListenerAddedEvent
 from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
 from infrastructure.integrations.notifications.dtos import Notification
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.websockets.managers import BaseConnectionManager
-from logic.commands.messages import AddTelegramListenerCommand, CreateChatCommand
+from prometheus_client import REGISTRY
+from punq import Scope
+
+from domain.events.messages import ListenerAddedEvent
+from logic.commands.messages import (
+    AddTelegramListenerCommand,
+    CreateChatCommand,
+)
 from logic.events.messages import ListenerAddedEventHandler
 from logic.exceptions.messages import ChatNotFoundException
 from logic.mediator.base import Mediator
-from test.fixtures import init_dummy_container
 
 
 def _counter(name: str) -> float:

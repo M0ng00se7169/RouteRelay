@@ -175,6 +175,7 @@ def test_metrics_endpoint_exposes_application_info(client: TestClient):
 	# Chunk 6.2 (ADR-0006): the build-info gauge must be present on /metrics
 	# with the configured version as a label and value 1.
 	from prometheus_client import REGISTRY
+
 	from settings.config import Config
 
 	version = Config().app_version

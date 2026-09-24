@@ -4,10 +4,11 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from infrastructure.logging_config import configure_json_logging
-from infrastructure.metrics import safe_set
-from infrastructure.metrics import application_info
+from infrastructure.metrics import (
+    application_info,
+    safe_set,
+)
 from prometheus_fastapi_instrumentator import PrometheusFastApiInstrumentator
-from settings.config import Config
 
 from application.api.lifespan import (
     close_message_broker,
@@ -19,6 +20,7 @@ from application.api.lifespan import (
 )
 from application.api.messages.handlers import router as message_router
 from application.api.messages.websockets.messages import router as message_ws_router
+from settings.config import Config
 
 
 @asynccontextmanager

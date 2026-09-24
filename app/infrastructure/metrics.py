@@ -19,8 +19,8 @@ See ``docs/adr/0006-metrics-implementation-plan.md`` (Section 3) for the full
 inventory and rationale.
 """
 
-from collections.abc import Callable
 import logging
+from collections.abc import Callable
 from typing import Any
 
 from prometheus_client import (

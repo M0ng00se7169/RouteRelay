@@ -14,9 +14,9 @@ import pytest
 from prometheus_client import REGISTRY
 
 from application.api.lifespan import (
-	_kafka_consumer_loop,
-	start_kafka_consumer,
-	stop_kafka_consumer,
+    _kafka_consumer_loop,
+    start_kafka_consumer,
+    stop_kafka_consumer,
 )
 
 
@@ -60,12 +60,12 @@ async def test_consumer_loop_counts_consumed_published_malformed():
 
 	consumed_before = _counter_value('kafka_messages_consumed_total', {'topic': TOPIC})
 	published_before = _counter_value(
-		'kafka_consumer_events_published_total', {'topic': TOPIC}
+		'kafka_consumer_events_published_total', {'topic': TOPIC},
 	)
 	malformed_before = _counter_value('kafka_consumer_malformed_total')
 
 	task = asyncio.create_task(
-		_kafka_consumer_loop(_BatchBroker(messages), TOPIC, mediator)
+		_kafka_consumer_loop(_BatchBroker(messages), TOPIC, mediator),
 	)
 
 	for _ in range(100):
@@ -109,11 +109,11 @@ async def test_consumer_loop_counts_errors_without_dying():
 
 	errors_before = _counter_value('kafka_consumer_errors_total', {'topic': TOPIC})
 	published_before = _counter_value(
-		'kafka_consumer_events_published_total', {'topic': TOPIC}
+		'kafka_consumer_events_published_total', {'topic': TOPIC},
 	)
 
 	task = asyncio.create_task(
-		_kafka_consumer_loop(_BatchBroker(messages), TOPIC, mediator)
+		_kafka_consumer_loop(_BatchBroker(messages), TOPIC, mediator),
 	)
 
 	for _ in range(100):
@@ -197,6 +197,7 @@ def _app_with(mapping):
 @pytest.mark.asyncio
 async def test_consumer_heartbeat_transitions_on_start_and_stop():
 	from infrastructure.message_brokers.base import BaseMessageBroker
+
 	from logic.mediator.base import Mediator
 	from settings.config import Config
 
@@ -222,6 +223,7 @@ async def test_consumer_heartbeat_transitions_on_start_and_stop():
 @pytest.mark.asyncio
 async def test_consumer_heartbeat_drops_on_crash():
 	from infrastructure.message_brokers.base import BaseMessageBroker
+
 	from logic.mediator.base import Mediator
 	from settings.config import Config
 

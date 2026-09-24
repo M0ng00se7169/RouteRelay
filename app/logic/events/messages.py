@@ -1,5 +1,13 @@
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+
+from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
+from infrastructure.integrations.notifications.dtos import Notification
+from infrastructure.metrics import (
+    safe_inc,
+    telegram_notifications_failed_total,
+    telegram_notifications_sent_total,
+)
 
 from domain.events.messages import (
     ChatDeletedEvent,
@@ -7,13 +15,6 @@ from domain.events.messages import (
     NewChatCreatedEvent,
     NewMessageReceivedEvent,
     NewMessageReceivedFromBrokerEvent,
-)
-from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
-from infrastructure.integrations.notifications.dtos import Notification
-from infrastructure.metrics import safe_inc
-from infrastructure.metrics import (
-    telegram_notifications_failed_total,
-    telegram_notifications_sent_total,
 )
 from logic.events.base import EventHandler
 
@@ -46,7 +47,7 @@ class ListenerAddedEventHandler(EventHandler):
             try:
                 notification = Notification(
                     title="New Listener Added",
-                    text=f"Chat: {event.chat_oid}\nListener ID: {event.listener_oid}"
+                    text=f"Chat: {event.chat_oid}\nListener ID: {event.listener_oid}",
                 )
                 await self.notification_client.send(notification)
                 # Delivery attempt metrics (ADR-0006, Chunk 6.1): when the
