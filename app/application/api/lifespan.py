@@ -1,29 +1,27 @@
 import asyncio
 import logging
-from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+
 from httpx import AsyncClient
+from infrastructure.message_brokers.base import BaseMessageBroker
+from infrastructure.metrics import (
+    kafka_consumer_errors_total,
+    kafka_consumer_events_published_total,
+    kafka_consumer_malformed_total,
+    kafka_consumer_up,
+    kafka_messages_consumed_total,
+    safe_inc,
+    safe_set,
+)
+from infrastructure.outbox.relay import OutboxRelay
 from punq import Scope
 
 from domain.events.messages import NewMessageReceivedFromBrokerEvent
-from infrastructure.metrics import (
-	safe_inc,
-	safe_set,
-)
-from infrastructure.metrics import (
-	kafka_consumer_errors_total,
-	kafka_consumer_events_published_total,
-	kafka_consumer_malformed_total,
-	kafka_consumer_up,
-	kafka_messages_consumed_total,
-)
-from infrastructure.message_brokers.base import BaseMessageBroker
-from infrastructure.outbox.relay import OutboxRelay
-
 from logic.init import init_container
 from logic.mediator.base import Mediator
 from settings.config import Config
+
 
 logger = logging.getLogger(__name__)
 
