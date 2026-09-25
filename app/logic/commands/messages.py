@@ -9,8 +9,10 @@ from typing import (
     TypeVar,
 )
 
-from infrastructure.metrics import safe_inc
-from infrastructure.metrics import db_operation_errors_total
+from infrastructure.metrics import (
+    db_operation_errors_total,
+    safe_inc,
+)
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.messages.base import (
@@ -32,6 +34,7 @@ from logic.exceptions.messages import (
     ChatWithThatTitleAlreadyExistsException,
 )
 from logic.mediator.base import EventMediator
+
 
 _T = TypeVar('_T')
 

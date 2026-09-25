@@ -7,12 +7,12 @@ across tests, so capture baselines and assert on deltas — never unregister.
 from unittest.mock import MagicMock
 
 from infrastructure.metrics import (
-	_safe_observe,
-	outbox_pending,
-	outbox_published_total,
-	safe_inc,
-	safe_observe,
-	safe_set,
+    _safe_observe,
+    outbox_pending,
+    outbox_published_total,
+    safe_inc,
+    safe_observe,
+    safe_set,
 )
 from prometheus_client import REGISTRY
 

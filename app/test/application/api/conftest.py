@@ -20,3 +20,13 @@ def app() -> FastAPI:
 @pytest.fixture
 def client(app: FastAPI) -> TestClient:
     return TestClient(app=app)
+
+
+@pytest.fixture
+def auth_headers() -> dict[str, str]:
+    """Bearer token for write endpoints (POST/DELETE enforce auth)."""
+    token_app = create_app()
+    with TestClient(token_app) as c:
+        resp = c.post('/auth/token', data={'username': 'admin', 'password': 'admin'})
+    assert resp.status_code == 200, resp.text
+    return {'Authorization': f"Bearer {resp.json()['access_token']}"}

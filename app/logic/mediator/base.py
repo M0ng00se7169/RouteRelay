@@ -5,13 +5,14 @@ from dataclasses import (
     field,
 )
 
-from domain.events.base import BaseEvent
-from infrastructure.metrics import safe_inc
 from infrastructure.metrics import (
     mediator_commands_handled_total,
     mediator_events_published_total,
     mediator_queries_handled_total,
+    safe_inc,
 )
+
+from domain.events.base import BaseEvent
 from logic.commands.base import (
     BaseCommand,
     CommandHandler,

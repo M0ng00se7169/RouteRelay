@@ -11,9 +11,29 @@ class Config(BaseSettings):
 
     outbox_relay_poll_interval: float = Field(default=1.0, alias='OUTBOX_RELAY_POLL_INTERVAL')
 
+    # Circuit breaker guarding the Mongo persistence path
+    # (infrastructure/resilience.py): after this many consecutive failures the
+    # breaker opens and calls fail fast with 503 until recovery_time elapses.
+    circuit_breaker_failure_threshold: int = Field(default=5, alias='CIRCUIT_BREAKER_FAILURE_THRESHOLD')
+    circuit_breaker_recovery_time: float = Field(default=30.0, alias='CIRCUIT_BREAKER_RECOVERY_TIME')
+
+    # JWT signing secret for the HS256 serializer (infrastructure/serializers/jwt.py).
+    jwt_secret: str = Field(default='supersecret', alias='JWT_SECRET')
+
+    # OAuth2 password flow: single demo user. Credentials are compared in
+    # constant time (settings/security.py).
+    auth_username: str = Field(default='admin', alias='AUTH_USERNAME')
+    auth_password: str = Field(default='admin', alias='AUTH_PASSWORD')
+
     new_chats_event_topic: str = Field(default='new-chats-topic')
     new_message_received_topic: str = Field(default='new-messages')
     kafka_url: str = Field(default='kafka:29092')
+
+    # Kafka consumer loop reconnect (O-1, application/api/lifespan.py): after the
+    # stream dies or exits, the loop retries with exponential backoff capped at
+    # the max below. Backoff resets to the initial delay on every received message.
+    kafka_consumer_backoff_initial: float = Field(default=1.0, alias='KAFKA_CONSUMER_BACKOFF_INITIAL')
+    kafka_consumer_backoff_max: float = Field(default=30.0, alias='KAFKA_CONSUMER_BACKOFF_MAX')
     chat_deleted_topic: str = Field(default='chat-deleted-topic')
     new_listener_added_topic: str = Field(default='listener-added-topic')
 

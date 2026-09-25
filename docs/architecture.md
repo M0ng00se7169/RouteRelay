@@ -130,7 +130,8 @@ alerting on once an operational baseline exists (ADR-0006 Q1), no rule yet;
 | `kafka_consumer_events_published_total` | Counter | topic | consumer loop (`api/lifespan.py`) | Events successfully published to the mediator | no — read together with consumed |
 | `kafka_consumer_errors_total` | Counter | topic | consumer loop (`api/lifespan.py`) | Unexpected exceptions while processing consumed messages (loop survives) | candidate — rate > 0 (pair with malformed) |
 | `kafka_consumer_malformed_total` | Counter | — | consumer loop (`api/lifespan.py`) | Consumed messages failing validation (missing `chat_oid`/`message`) | candidate — sustained rate > 0 means a producer/schema bug |
-| `kafka_consumer_up` | Gauge | — | consumer lifecycle (`api/lifespan.py`) | 1 while the consumer loop task runs; 0 after graceful stop or crash | ✅ alerted — `KafkaConsumerDown` (guarded by the app's `up`) |
+| `kafka_consumer_up` | Gauge | — | consumer lifecycle (`api/lifespan.py`) | 1 while the consumer loop task runs (stays 1 through reconnect backoff); 0 after graceful stop or any non-cancelled task exit | ✅ alerted — `KafkaConsumerDown` (guarded by the app's `up`) |
+| `kafka_consumer_reconnects_total` | Counter | topic | consumer loop (`api/lifespan.py`) | Reconnection attempts after the broker stream died or exited cleanly (O-1 reconnect loop with exponential backoff) | ✅ alerted — `KafkaConsumerReconnecting` |
 | `ws_connections_active` | Gauge | — | WS manager (`websockets/managers.py`) | Live WebSocket connections across all chats (recomputed from the manager map, cannot drift) | no — capacity trend |
 | `ws_connections_accepted_total` | Counter | — | WS manager (`websockets/managers.py`) | Connections accepted | no |
 | `ws_connections_removed_total` | Counter | — | WS manager (`websockets/managers.py`) | Connections removed (counted only when a socket was actually registered) | no — churn vs accepted |
@@ -161,6 +162,7 @@ Prometheus evaluates the rules in `docker_compose/prometheus-alerts.yml`
 | `OutboxBacklogGrowing` | `outbox_pending > 200 for 5m` | warning | the relay stops draining the outbox (Kafka outage, dead relay, producers outpacing it) |
 | `OutboxRelayFailing` | `rate(outbox_publish_errors_total[5m]) > 0` | warning | the relay recorded publish errors in the last 5m — rows stay unsent and retry |
 | `KafkaConsumerDown` | `kafka_consumer_up == 0 and up{job='kafka-chat-api'} == 1` | critical | the consumer loop task is dead while the app itself is up — inbound messages stop reaching the fan-out |
+| `KafkaConsumerReconnecting` | `increase(kafka_consumer_reconnects_total[15m]) > 0` | warning | at least one consumer reconnect in the last 15m — the broker stream died or exited cleanly; delivery self-heals via backoff, repeated firing signals Kafka instability |
 | `WSBroadcastFailures` | `rate(ws_broadcast_failures_total[5m]) > 0` | warning | per-socket send failures during fan-out (clients dropping mid-broadcast) |
 
 The `outbox_pending > 200` threshold is calibrated from the 2026-09-17 Locust

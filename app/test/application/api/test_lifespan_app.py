@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from application.api.main import create_app
 from logic.init import init_container
+from settings.security import issue_token
 
 
 def test_app_lifespan_starts_and_stops_broker_and_relay():
@@ -13,11 +14,13 @@ def test_app_lifespan_starts_and_stops_broker_and_relay():
 	app: FastAPI = create_app()
 	app.dependency_overrides[init_container] = lambda: container
 
+	headers = {'Authorization': f'Bearer {issue_token("admin")}'}
+
 	# Entering the TestClient context runs the lifespan (init broker + relay),
 	# exiting stops the relay and closes the broker, all without real Kafka.
 	with TestClient(app) as client:
 		# A simple request proves the app is live after lifespan startup.
-		resp = client.post('/chat/', json={'title': 'Lifespan Chat'})
+		resp = client.post('/chat/', json={'title': 'Lifespan Chat'}, headers=headers)
 		assert resp.status_code == 201
 
 

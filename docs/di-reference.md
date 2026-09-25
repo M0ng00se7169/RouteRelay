@@ -20,8 +20,9 @@ This file is a *table of what is registered*, not a re-explanation of the patter
 |---|---|---|---|
 | `init.py:74` | `Config` | `Config()` instance | singleton |
 | `init.py:81` | `AsyncIOMotorClient` | `create_mongodb_client()` factory | singleton |
-| `init.py:98` | `BaseChatsRepository` | `MongoDBChatsRepository` (factory) | singleton |
-| `init.py:99` | `BaseMessagesRepository` | `MongoDBMessagesRepository` (factory) | singleton |
+| `init.py:112` | `CircuitBreaker` | `create_mongo_circuit_breaker()` (name `'mongo'`, wraps both repo factories below) | singleton |
+| `init.py:134` | `BaseChatsRepository` | `CircuitBreakerChatsRepository(  MongoDBChatsRepository)` (factory) | singleton |
+| `init.py:135` | `BaseMessagesRepository` | `CircuitBreakerMessagesRepository(  MongoDBMessagesRepository)` (factory) | singleton |
 | `init.py:102` | `CreateChatCommandHandler` | class | default |
 | `init.py:103` | `CreateMessageCommandHandler` | class | default |
 | `init.py:106` | `GetChatDetailQueryHandler` | class | default |
@@ -33,6 +34,12 @@ This file is a *table of what is registered*, not a re-explanation of the patter
 | `init.py:225` | `Mediator` | `init_mediator()` factory | default |
 | `init.py:226` | `EventMediator` | `init_mediator()` factory | default |
 | `init.py:227` | `BaseConnectionManager` | `ConnectionManager()` instance | singleton |
+
+> **Circuit breaker:** the `Base{Chats,Messages}Repository` implementations are wrapped in breaker
+> proxies (`app/infrastructure/resilience.py`); when the shared `'mongo'` breaker is open, calls fail
+> fast with `CircuitOpenError`, mapped to **HTTP 503 + Retry-After** by the app-level handler in
+> `application/api/main.py`. Test containers override these registrations with in-memory repos and
+> never see the proxies (`init_dummy_container(wrap_repos_with_breaker=True)` opts in for the 503 test).
 
 > **Note on query handlers:** query handlers are registered top-level (`:106`–`:109`) *and* resolved
 > again inside `init_mediator` (`:200`, `:204`, `:208`, `:212`) for `register_query`. The top-level

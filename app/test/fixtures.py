@@ -1,5 +1,4 @@
 import asyncio
-from unittest.mock import AsyncMock
 
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import BaseOutboxRepository
@@ -13,6 +12,11 @@ from infrastructure.repositories.messages.base import (
 from infrastructure.repositories.messages.memory import (
     MemoryChatRepository,
     MemoryMessagesRepository,
+)
+from infrastructure.resilience import (
+    CircuitBreaker,
+    CircuitBreakerChatsRepository,
+    CircuitBreakerMessagesRepository,
 )
 from punq import (
     Container,
@@ -72,10 +76,21 @@ class DummyMessageBroker:
 		pass
 
 
-def init_dummy_container() -> Container:
+def init_dummy_container(*, wrap_repos_with_breaker: bool = False) -> Container:
 	container = init_container()
-	container.register(BaseChatsRepository, MemoryChatRepository, scope=Scope.singleton)
-	container.register(BaseMessagesRepository, MemoryMessagesRepository, scope=Scope.singleton)
+
+	# Opt-in (used by the 503 integration test): wrap the in-memory repos in the
+	# same breaker proxies the production container wires (logic/init.py). Memory
+	# repos never fail, so the breaker stays closed unless a test forces it open.
+	breaker = container.resolve(CircuitBreaker)
+	chats_repository: BaseChatsRepository = MemoryChatRepository()
+	messages_repository: BaseMessagesRepository = MemoryMessagesRepository()
+	if wrap_repos_with_breaker:
+		chats_repository = CircuitBreakerChatsRepository(inner=chats_repository, breaker=breaker)
+		messages_repository = CircuitBreakerMessagesRepository(inner=messages_repository, breaker=breaker)
+
+	container.register(BaseChatsRepository, instance=chats_repository, scope=Scope.singleton)
+	container.register(BaseMessagesRepository, instance=messages_repository, scope=Scope.singleton)
 	container.register(
 		BaseMessageBroker,
 		instance=DummyMessageBroker(),

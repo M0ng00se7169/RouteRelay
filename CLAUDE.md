@@ -6,6 +6,7 @@ FastAPI + Kafka + MongoDB chat backend — DDD, CQRS, event-driven.
 
 | Topic | Location |
 |-------|----------|
+| **Living project state (read first)** | `PROJECT_MEMORY.md` |
 | Architecture overview | `docs/architecture.md` |
 | Local dev & Makefile | `docs/local-development.md` |
 | Code conventions & patterns | `.claude/rules/*.md` |
