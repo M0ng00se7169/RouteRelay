@@ -5,7 +5,7 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-25** · Tests: **217 passed** (`cd app && poetry run pytest`, ~5s)
+> Last updated: **2026-09-25** · Tests: **217 passed** (`cd app && poetry run pytest`, ~5s) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest, promtool/amtool, docker build)
 
 ---
 
@@ -80,6 +80,17 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — CI pipeline added (GitHub Actions).** `.github/workflows/ci.yml`, 4 jobs:
+  lint = the repo's own pre-commit suite (`--all-files`, pyupgrade/ruff/add-trailing-comma/isort —
+  `ruff format` is deliberately NOT a gate, 83 files would be reformatted), tests = pytest
+  (self-contained, no services), configs = promtool + amtool validation of the observability
+  stack, docker build = Buildx image build check with GHA cache. Triggers: push to
+  `main`/`features`, PRs to `main`. Enabling it required a lint baseline: 2 unused imports
+  removed + isort normalized 5 JWT-import blocks (pre-commit suite is now idempotent on all
+  files). README gained the CI badge + a CI/CD section; README/architecture.md de-duplicated
+  first (Makefile table corrected to all 17 real targets — the old architecture.md copy said
+  "Postgres", and the tech table claimed SQLAlchemy/Loguru which this stack never had).
+  Not yet pushed; first Actions run happens on the next push.
 - **2026-09-25 — Telegram alerting live (ADR-0007 §4 decision).** `oncall-critical` and
   `team-warnings` in `docker_compose/alertmanager/alertmanager.yml` gained `telegram_configs`
   (AM's built-in receiver, v0.34.1) while KEEPING the webhook sink — dual delivery. Decided
