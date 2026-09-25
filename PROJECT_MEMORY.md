@@ -80,6 +80,15 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — Repo polish: MIT LICENSE + ipython out of the prod image.** Added `LICENSE`
+  (MIT, © M0ng00se7169); moved `ipython` from runtime deps to the dev group (it was shipped into
+  the prod image via the Dockerfile's `poetry export`) and filled the empty pyproject
+  description. **Gotcha that almost shipped:** local Poetry is 2.1.3 — its lock file
+  (lock-version 2.1) is unreadable by the Poetry 1.8.2 pinned in the Dockerfile, and 2.x dropped
+  the built-in `export` the Dockerfile uses. Lock was regenerated with 1.8.2 in a throwaway venv
+  (`python -m venv` + pip install poetry==1.8.2 → `poetry lock --no-update`); verified prod
+  export has 0 ipython hits, dev export has 1, 217 tests pass. **Rule: never run bare
+  `poetry lock` with the local 2.x — regenerate with 1.8.2.**
 - **2026-09-25 — README portfolio section: "Engineering Highlights".** Top-of-README 4-step
   CI/CD story table (push/PR → merge → deploy → rollback) linking the CI/CD run pages, workflow
   files, GHCR packages, the deploy-and-rollback runbook and ADR-0006/0007; H1 title + CD badge

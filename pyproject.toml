@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "fastapi-examples"
 version = "0.1.0"
-description = ""
+description = "Multi-user chat backend demonstrating DDD, CQRS, and event-driven architecture with FastAPI, Kafka, and MongoDB, plus a full observability and CI/CD stack."
 authors = ["M0ng00se7169 <nickkomarowski@gmail.com>"]
 readme = "README.md"
 
@@ -10,7 +10,6 @@ python = "^3.11"
 fastapi = {extras = ["httpx"], version = "^0.115.2"}
 motor = "^3.6.0"
 uvicorn = { extras = ["all"], version = "^0.32.0" }
-ipython = "^8.28.0"
 httpx = "^0.27.2"
 pydantic-settings = "^2.6.0"
 orjson = "^3.10.10"
@@ -24,6 +23,7 @@ python-multipart = "^0.0.32"
 
 
 [tool.poetry.group.dev.dependencies]
+ipython = "^8.28.0"
 pytest = "^8.3.3"
 pytest-asyncio = "^0.24.0"
 faker = "^30.6.0"
