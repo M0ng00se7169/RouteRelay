@@ -426,6 +426,18 @@ pull requests to `main`:
 The configs job keeps the observability stack honest: a malformed alert rule or receiver fails
 CI before it can reach the running Prometheus/Alertmanager.
 
+Continuous delivery (`.github/workflows/cd.yml`) picks up from there: on every push to `main`
+it waits for the CI run on the same commit to succeed, then builds the image and pushes it to
+**GitHub Container Registry**:
+
+```bash
+docker pull ghcr.io/m0ng00se7169/ddd_examples:latest   # or by commit SHA
+```
+
+Auth is the workflow's built-in `GITHUB_TOKEN` (`packages: write`) — no PAT. CI's Docker job is
+skipped on `main` because CD builds the same SHA, so the image is built exactly once. Package
+visibility is set per-package on GHCR after the first push (independent of repo visibility).
+
 ---
 
 ## Makefile Commands

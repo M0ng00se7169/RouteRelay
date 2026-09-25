@@ -80,6 +80,13 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — CD to GHCR added.** `.github/workflows/cd.yml`: on push to `main` → wait for
+  the CI run's `Tests (pytest)` check on the same SHA (`lewagon/wait-on-check-action`) → buildx
+  build + push to `ghcr.io/m0ng00se7169/ddd_examples` (tags: `latest` on the default branch +
+  full commit SHA via metadata-action; GHA layer cache). Auth is the built-in `GITHUB_TOKEN`
+  with `packages: write` — no PAT; package visibility is flipped per-package on GHCR after the
+  first push (independent of repo visibility). CI's `docker-build` job now skips on `main`
+  (`if: github.ref != 'refs/heads/main'`) so the image builds exactly once per SHA.
 - **2026-09-25 — CI pipeline added (GitHub Actions).** `.github/workflows/ci.yml`, 4 jobs:
   lint = the repo's own pre-commit suite (`--all-files`, pyupgrade/ruff/add-trailing-comma/isort —
   `ruff format` is deliberately NOT a gate, 83 files would be reformatted), tests = pytest
