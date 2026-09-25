@@ -24,11 +24,11 @@ permissions:
 jobs:
   lint:
     name: Lint (pre-commit suite)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
 
@@ -48,14 +48,14 @@ jobs:
 
   tests:
     name: Tests (pytest)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Install Poetry
         run: pipx install poetry==1.8.2
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: poetry
@@ -71,9 +71,9 @@ jobs:
 
   configs:
     name: Observability configs (promtool + amtool)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Validate Prometheus config and alert rules
         run: >
@@ -90,12 +90,12 @@ jobs:
 
   docker-build:
     name: Docker image build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # On main the CD pipeline builds and pushes the same SHA to GHCR —
     # building twice would be pure duplication.
     if: github.ref != 'refs/heads/main'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
