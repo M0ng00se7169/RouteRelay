@@ -1,6 +1,6 @@
 # ADR-0007: Alertmanager Wiring — Routing, Deduplication, Silences
 
-**Status**: Accepted — Chunks 1–3 implemented 2026-09-25 with the webhook-sink transport (see §9); Telegram receiver remains an open option
+**Status**: Accepted — fully implemented 2026-09-25 (Chunks 1–4) with the webhook-sink transport (see §9); Telegram receiver remains an open option
 **Created**: 2026-09-25
 **Scope**: `docker_compose/` (new alertmanager service), `prometheus.yml`, `.env*`; no app code
 **Related**: ADR-0006 (metrics + alert rules, Chunk 7.2 deferred Alertmanager wiring),
