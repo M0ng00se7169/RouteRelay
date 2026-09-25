@@ -150,10 +150,16 @@ async def test_kafka_start_creates_producer_and_consumer():
 
 	producer = AsyncMock()
 	consumer = AsyncMock()
+	producer_kwargs: dict = {}
+
+	def _capture_producer(**kwargs):
+		producer_kwargs.update(kwargs)
+		return producer
+
 	# Patch the aiokafka classes so start() does not open a real network connection.
 	import infrastructure.message_brokers.kafka as kafka_mod
 	orig_p, orig_c = kafka_mod.AIOKafkaProducer, kafka_mod.AIOKafkaConsumer
-	kafka_mod.AIOKafkaProducer = lambda **k: producer  # noqa: N801
+	kafka_mod.AIOKafkaProducer = _capture_producer  # noqa: N801
 	kafka_mod.AIOKafkaConsumer = lambda **k: consumer  # noqa: N801
 	try:
 		await broker.start()
@@ -164,17 +170,28 @@ async def test_kafka_start_creates_producer_and_consumer():
 	assert broker.consumer is consumer
 	producer.start.assert_awaited_once()
 	consumer.start.assert_awaited_once()
+	# Durability: the awaited ack must require every in-sync replica, not just
+	# the leader (acks=1 is the aiokafka default).
+	assert producer_kwargs['acks'] == 'all'
+	assert producer_kwargs['bootstrap_servers'] == 'localhost:9092'
 
 
 @pytest.mark.asyncio
-async def test_kafka_send_message_uses_producer():
+async def test_kafka_send_message_awaits_producer_ack():
+	# Regression (live drill 2026-09-25): send_message used to await only
+	# producer.send(), which merely buffers and returns a delivery future —
+	# broker failures never surfaced, rows were marked sent against a dead
+	# Kafka, and buffered rows died with the process (at-most-once). Awaiting
+	# the ack is what the relay's at-least-once contract and the O-2 circuit
+	# breaker (real failures to count) depend on.
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	producer = AsyncMock()
 	broker.producer = producer
 
 	await broker.send_message(key=b'k', topic='t', value=b'msg')
 
-	producer.send.assert_awaited_once_with(topic='t', key=b'k', value=b'msg')
+	producer.send_and_wait.assert_awaited_once_with(topic='t', key=b'k', value=b'msg')
+	producer.send.assert_not_awaited()
 
 
 @pytest.mark.asyncio

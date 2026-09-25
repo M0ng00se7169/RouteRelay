@@ -23,11 +23,19 @@ class KafkaMessageBroker(BaseMessageBroker):
 	bootstrap_servers: str
 	group_id: str = 'chat'
 	metadata_max_age_ms: int = 30000
+	# Durability: 'all' makes the awaited ack (send_and_wait) require every
+	# in-sync replica, not just the leader — aiokafka defaults to acks=1. On the
+	# single-broker dev cluster the ISR is just the leader, so behavior is
+	# unchanged there; this hardens the guarantee for any cluster with RF>1.
+	acks: str = 'all'
 	producer: Optional[AIOKafkaProducer] = field(default=None, init=False)
 	consumer: Optional[AIOKafkaConsumer] = field(default=None, init=False)
 
 	async def start(self):
-		self.producer = AIOKafkaProducer(bootstrap_servers=self.bootstrap_servers)
+		self.producer = AIOKafkaProducer(
+			bootstrap_servers=self.bootstrap_servers,
+			acks=self.acks,
+		)
 		self.consumer = AIOKafkaConsumer(
 			bootstrap_servers=self.bootstrap_servers,
 			group_id=self.group_id,
@@ -39,7 +47,13 @@ class KafkaMessageBroker(BaseMessageBroker):
 	async def send_message(self, topic: str, key: bytes, value: bytes):
 		if self.producer is None:
 			raise RuntimeError('KafkaMessageBroker.send_message called before start()')
-		await self.producer.send(topic=topic, key=key, value=value)
+		# send() only buffers and returns a delivery future; awaiting THAT future
+		# is what surfaces broker failures (KafkaTimeoutError etc.). Without it a
+		# dead broker looks healthy: rows get marked sent, delivery errors vanish,
+		# buffered rows die with the process (at-most-once). send_and_wait awaits
+		# the future, restoring the relay's documented at-least-once contract and
+		# giving the O-2 circuit breaker real failures to count.
+		await self.producer.send_and_wait(topic=topic, key=key, value=value)
 
 	async def close(self):
 		if self.producer is not None:

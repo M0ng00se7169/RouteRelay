@@ -9,15 +9,8 @@ editing — code moves.
 
 ## Open issues
 
-### O-2 — Outbox relay is not circuit-breaker-guarded
-**Files:** `app/infrastructure/outbox/relay.py` (`_tick`), `app/infrastructure/resilience.py`
-**Severity:** Low
-
-The Mongo persistence path is guarded by the `'mongo'` circuit breaker (2026-09-25), but the
-relay's `message_broker.send_message` calls are not. Impact is limited because the relay already
-retries naturally (aborts the batch on first failure, retries next tick) — the cost is one doomed
-send + producer timeout per poll tick during a Kafka outage, plus error-log noise. Reuse
-`CircuitBreaker` with a `'kafka'` name; skip the batch entirely while open.
+None — all filed issues are fixed (see the index below). This space is intentionally kept for
+future findings.
 
 ---
 
@@ -37,3 +30,4 @@ Kept as a one-line index so old references don't dangle; details live in git his
 | 8 | Command handlers not uniformly top-level registered | Fixed — all handlers factory-registered in `_init_container` |
 | O-1 | Kafka consumer loop: no reconnect/backoff; `kafka_consumer_up` missed clean loop exits | Fixed 2026-09-25 — reconnect loop with exponential backoff (`KAFKA_CONSUMER_BACKOFF_*`), `kafka_consumer_reconnects_total{topic}` metric, heartbeat drops on any non-cancelled task completion |
 | O-3 | `ruff` missing from the poetry env — `poetry run ruff check` failed despite the pre-commit gate | Fixed 2026-09-25 — `ruff@^0.15.22` added to dev deps (pinned to match the pre-commit hook version), lock file updated; the documented verify command works |
+| O-2 | Outbox relay not circuit-breaker-guarded — one doomed send + producer timeout per tick during a Kafka outage | Fixed 2026-09-25 — optional `'kafka'` breaker (private instance in `create_outbox_relay`, same config knobs as `'mongo'`): open-state pre-check skips the batch (rows stay unsent), sends wrapped in `breaker.call()`, `CircuitOpenError` mid-batch skips the histogram sample; `circuit_breaker=None` keeps the legacy path |

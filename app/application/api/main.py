@@ -27,6 +27,7 @@ from application.api.lifespan import (
 )
 from application.api.messages.handlers import router as message_router
 from application.api.messages.websockets.messages import router as message_ws_router
+from application.api.ops.handlers import router as ops_router
 from settings.config import Config
 
 
@@ -52,6 +53,9 @@ def create_app() -> FastAPI:
 	app.include_router(auth_router, prefix='/auth')
 	app.include_router(message_router, prefix='/chat')
 	app.include_router(message_ws_router, prefix='/chats')
+	# Alertmanager webhook sink (ADR-0007 Chunk 3): alerts land in the JSON
+	# logs (Loki-visible) until a paging transport is chosen.
+	app.include_router(ops_router)
 
 	# Build-info gauge (ADR-0006, Chunk 6.2): application_info{version=...} = 1,
 	# read from APP_VERSION (defaults to 0.1.0) for deployment tracking.

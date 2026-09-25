@@ -1,0 +1,21 @@
+services:
+  alertmanager:
+    image: prom/alertmanager:latest
+    container_name: alertmanager
+    ports:
+      - '${ALERTMANAGER_PORT}:9093'
+    volumes:
+      # Same pattern as prometheus.yaml: ../ because compose resolves relative
+      # paths against THIS file's directory (docker_compose/).
+      - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      # Notification/silence state survives restarts (ADR-0007 Chunk 2).
+      - alertmanager-data:/alertmanager
+    networks:
+      - backend
+
+volumes:
+  alertmanager-data:
+
+networks:
+  backend:
+    driver: bridge

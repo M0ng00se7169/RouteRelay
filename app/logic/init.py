@@ -160,10 +160,20 @@ def _init_container() -> Container:
     container.register(BaseConnectionManager, instance=ConnectionManager(), scope=Scope.singleton)
 
     def create_outbox_relay() -> OutboxRelay:
+        # O-2: the relay gets its own 'kafka' breaker — separate instance from
+        # the 'mongo' breaker (deliberately NOT registered under the
+        # CircuitBreaker type; that key belongs to the mongo one), same config
+        # knobs (threshold / recovery time).
+        kafka_breaker = CircuitBreaker(
+            name='kafka',
+            failure_threshold=config.circuit_breaker_failure_threshold,
+            recovery_time=config.circuit_breaker_recovery_time,
+        )
         return build_relay(
             outbox_repository=container.resolve(BaseOutboxRepository),
             message_broker=container.resolve(BaseMessageBroker),
             config=config,
+            circuit_breaker=kafka_breaker,
         )
 
     container.register(OutboxRelay, factory=create_outbox_relay, scope=Scope.singleton)

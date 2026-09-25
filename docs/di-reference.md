@@ -40,6 +40,10 @@ This file is a *table of what is registered*, not a re-explanation of the patter
 > fast with `CircuitOpenError`, mapped to **HTTP 503 + Retry-After** by the app-level handler in
 > `application/api/main.py`. Test containers override these registrations with in-memory repos and
 > never see the proxies (`init_dummy_container(wrap_repos_with_breaker=True)` opts in for the 503 test).
+> The outbox relay (`OutboxRelay` singleton, built by `create_outbox_relay`) gets its own **private
+> `'kafka'` breaker** — same config knobs, deliberately not registered under the `CircuitBreaker`
+> type (that key is the mongo one). While open, the relay skips the outbox batch (rows stay
+> unsent); `circuit_breaker=None` disables the guard.
 
 > **Note on query handlers:** query handlers are registered top-level (`:106`–`:109`) *and* resolved
 > again inside `init_mediator` (`:200`, `:204`, `:208`, `:212`) for `register_query`. The top-level

@@ -278,9 +278,10 @@ telegram_notifications_failed_total = Counter(
 )
 
 
-# --- Circuit breaker (Mongo persistence path) --------------------------------
-# Emitted by app/infrastructure/resilience.py. The `name` label is a closed set
-# (currently only 'mongo' — one breaker guards the whole persistence path, D3).
+# --- Circuit breaker (guarded dependencies) ----------------------------------
+# Emitted by app/infrastructure/resilience.py. The `name` label is a closed set:
+# 'mongo' guards the persistence path (repo proxies in logic/init.py), 'kafka'
+# guards the outbox relay's Kafka sends (O-2, create_outbox_relay).
 # state: 0 = closed (healthy), 1 = open or half-open (failing fast / probing).
 
 circuit_breaker_state = Gauge(

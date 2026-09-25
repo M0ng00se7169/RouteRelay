@@ -5,6 +5,14 @@ global:
 rule_files:
   - /etc/prometheus/prometheus-alerts.yml
 
+# ADR-0007 Chunks 1-2: alerts are sent to Alertmanager on the backend network
+# (compose: docker_compose/alertmanager.yaml). Without this section Prometheus
+# keeps alerts in its own UI only.
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ['alertmanager:9093']
+
 scrape_configs:
   - job_name: 'kafka-chat-api'
     metrics_path: /metrics
@@ -17,3 +25,8 @@ scrape_configs:
   - job_name: 'prometheus'
     static_configs:
       - targets: ['localhost:9090']
+
+  # ADR-0007 Chunk 2: self-monitoring of Alertmanager (up{job="alertmanager"}).
+  - job_name: 'alertmanager'
+    static_configs:
+      - targets: ['alertmanager:9093']

@@ -1,0 +1,61 @@
+# Alertmanager configuration (ADR-0007, Chunks 2-3).
+#
+# Routing mirrors the runbook split: critical pages immediately (no batching),
+# warnings are grouped per subsystem. All receivers currently point at the
+# app's webhook sink (POST /ops/alerts -> structured JSON logs, Loki-visible):
+# the dev transport from ADR-0007 Chunk 3. Swapping in a paging transport
+# (Telegram relay etc.) later means changing ONLY the receiver URLs here.
+#
+# Validate with:
+#   docker run --rm --entrypoint amtool -v <file>:/etc/alertmanager/alertmanager.yml:ro \
+#     prom/alertmanager:latest check-config /etc/alertmanager/alertmanager.yml
+route:
+  receiver: default-log           # catch-all: must exist, must never page
+  group_by: ['alertname', 'job']
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # critical pages immediately, no batching delay
+    - matchers:
+        - severity = "critical"
+      receiver: oncall-critical
+      group_wait: 0s
+      repeat_interval: 1h
+      continue: false
+    # warnings grouped per subsystem
+    - matchers:
+        - severity = "warning"
+      receiver: team-warnings
+      group_wait: 5m
+      repeat_interval: 12h
+      continue: false
+
+receivers:
+  - name: default-log
+    webhook_configs:
+      - url: 'http://main-app:8000/ops/alerts'
+        send_resolved: true
+  - name: oncall-critical
+    webhook_configs:
+      - url: 'http://main-app:8000/ops/alerts'
+        send_resolved: true
+  - name: team-warnings
+    webhook_configs:
+      - url: 'http://main-app:8000/ops/alerts'
+        send_resolved: true
+
+# Inhibition pairs encode the drill's causal story (ADR-0007 Chunk 2):
+# an open circuit explains relay failures; a dead consumer makes reconnect
+# noise irrelevant. While the source fires, targets are not notified.
+inhibit_rules:
+  - source_matchers:
+      - alertname = "OutboxRelayCircuitOpen"
+    target_matchers:
+      - alertname = "OutboxRelayFailing"
+    equal: ['job']
+  - source_matchers:
+      - alertname = "KafkaConsumerDown"
+    target_matchers:
+      - alertname = "KafkaConsumerReconnecting"
+    equal: ['job']
