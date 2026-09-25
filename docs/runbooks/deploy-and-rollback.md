@@ -1,7 +1,7 @@
 # Runbook — Deploy from GHCR & roll back to a previous SHA tag
 
 How to run the stack from the image CD publishes (`.github/workflows/cd.yml` →
-`ghcr.io/m0ng00se7169/ddd_examples`) and how to walk a bad release back to any previous commit.
+`ghcr.io/m0ng00se7169/routerelay`) and how to walk a bad release back to any previous commit.
 Written for the single-host compose deployment this repo ships with.
 
 > **Not for local development** — that flow stays `make all` (build + repo bind-mount +
@@ -37,7 +37,7 @@ so any tag in the registry is known-good by the pipeline's definition.
    `GRAFANA_PORT`):
 
    ```env
-   APP_IMAGE=ghcr.io/m0ng00se7169/ddd_examples:<commit-sha>   # or :latest
+   APP_IMAGE=ghcr.io/m0ng00se7169/routerelay:<commit-sha>   # or :latest
    ```
 
 3. **Bring the stack up from images.** Compose's `-f` override merge cannot *remove* keys, so
@@ -76,7 +76,7 @@ so any tag in the registry is known-good by the pipeline's definition.
 2. **Pin the previous good SHA** in `.env`:
 
    ```env
-   APP_IMAGE=ghcr.io/m0ng00se7169/ddd_examples:<previous-good-sha>
+   APP_IMAGE=ghcr.io/m0ng00se7169/routerelay:<previous-good-sha>
    ```
 
 3. **Re-run the `up` command** from the first-deploy section. Compose creates `main-app` from

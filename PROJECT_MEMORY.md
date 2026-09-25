@@ -104,7 +104,7 @@ Key wiring facts:
   reference only) — job tables live once, in Highlights.
 - **2026-09-25 — Deploy + rollback path documented.** `docs/runbooks/deploy-and-rollback.md`:
   run the stack from CD's GHCR images and roll back by pinning
-  `APP_IMAGE=ghcr.io/m0ng00se7169/ddd_examples:<sha>` in `.env` (never git-revert to roll back —
+  `APP_IMAGE=ghcr.io/m0ng00se7169/routerelay:<sha>` in `.env` (never git-revert to roll back —
   that triggers a fresh CD build). New `deploy/compose/docker-compose.deploy.yml` REPLACES
   `main-app` (compose `-f` override merge cannot remove keys — an `image:` override over
   `app.yaml` would still hit its `build:` and repo bind-mount + `--reload`; verified via
@@ -112,7 +112,7 @@ Key wiring facts:
   Blast-radius table: Mongo/Kafka/AM state survives an app swap; the app is stateless by design
   (outbox). `.github/workflows/cd.yml`: on push to `main` → wait for
   the CI run's `Tests (pytest)` check on the same SHA (`lewagon/wait-on-check-action`) → buildx
-  build + push to `ghcr.io/m0ng00se7169/ddd_examples` (tags: `latest` on the default branch +
+  build + push to `ghcr.io/m0ng00se7169/routerelay` (tags: `latest` on the default branch +
   full commit SHA via metadata-action; GHA layer cache). Auth is the built-in `GITHUB_TOKEN`
   with `packages: write` — no PAT; package visibility is flipped per-package on GHCR after the
   first push (independent of repo visibility). CI's `docker-build` job now skips on `main`

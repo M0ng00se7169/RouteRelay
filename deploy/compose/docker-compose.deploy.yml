@@ -15,12 +15,12 @@
 # wholesale instead.
 #
 # Rollback = pin the tag in .env and re-run the command above:
-#   APP_IMAGE=ghcr.io/m0ng00se7169/ddd_examples:<commit-sha>
+#   APP_IMAGE=ghcr.io/m0ng00se7169/routerelay:<commit-sha>
 services:
   main-app:
     # Resolved by compose from the environment/.env at DEPLOY time — not by
     # the container. Default: whatever CD last pushed to main.
-    image: ${APP_IMAGE:-ghcr.io/m0ng00se7169/ddd_examples:latest}
+    image: ${APP_IMAGE:-ghcr.io/m0ng00se7169/routerelay:latest}
     container_name: main-app
     ports:
       - "${API_PORT}:8000"

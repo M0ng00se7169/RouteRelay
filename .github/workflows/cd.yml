@@ -4,7 +4,7 @@ name: CD
 # main changes. Runs AFTER the CI pipeline reports success on the same
 # commit, so nothing broken lands in the registry. The image is the
 # portfolio artifact — pull with:
-#   docker pull ghcr.io/m0ng00se7169/ddd_examples:latest
+#   docker pull ghcr.io/m0ng00se7169/routerelay:latest
 #
 # Package visibility is independent of repo visibility: after the first
 # successful run, flip the package public under

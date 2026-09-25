@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "fastapi-examples"
+name = "routerelay"
 version = "0.1.0"
 description = "Multi-user chat backend demonstrating DDD, CQRS, and event-driven architecture with FastAPI, Kafka, and MongoDB, plus a full observability and CI/CD stack."
 authors = ["M0ng00se7169 <nickkomarowski@gmail.com>"]
