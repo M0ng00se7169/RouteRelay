@@ -19,6 +19,8 @@ on:
 permissions:
   contents: read
   packages: write
+  # wait-on-check-action reads the Checks API for the CI run of this SHA
+  checks: read
 
 concurrency:
   group: cd-${{ github.ref }}
