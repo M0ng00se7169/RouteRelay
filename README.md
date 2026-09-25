@@ -1,8 +1,33 @@
-## What This Project Is
+# Simple Kafka Chat — FastAPI · Kafka · MongoDB (DDD + CQRS)
 
 [![CI](https://github.com/M0ng00se7169/DDD_examples/actions/workflows/ci.yml/badge.svg)](https://github.com/M0ng00se7169/DDD_examples/actions/workflows/ci.yml)
+[![CD](https://github.com/M0ng00se7169/DDD_examples/actions/workflows/cd.yml/badge.svg)](https://github.com/M0ng00se7169/DDD_examples/actions/workflows/cd.yml)
+
+## What This Project Is
 
 **Simple Kafka Chat** is a FastAPI application that implements a multi-user chat backend using **Domain-Driven Design (DDD)**, **CQRS**, and **event-driven architecture** with **Apache Kafka**. Chats and messages are persisted in **MongoDB**, clients can subscribe to live updates over **WebSockets**, and there is groundwork for **Telegram** notifications when listeners are added to a chat.
+
+---
+
+## Engineering Highlights — the CI/CD story, end to end
+
+Everything in this repository is wired the way a production team would run it: the same quality
+gates locally and in CI, a merge publishes a pinned image, and a bad release rolls back in
+seconds without a rebuild. Follow the trail:
+
+| Step | What happens | Where to look |
+|---|---|---|
+| **1 · Push / PR** | Four CI jobs run on every push and pull request: the repo's own pre-commit suite (lint), the pytest suite (217 tests, self-contained — no services needed), `promtool` + `amtool` validation of the Prometheus/Alertmanager configs, and a Buildx image build | [CI runs](https://github.com/M0ng00se7169/DDD_examples/actions/workflows/ci.yml) · [workflow](.github/workflows/ci.yml) |
+| **2 · Merge to `main`** | CD waits for the CI run on the *same commit* to pass, then builds and pushes the image to GitHub Container Registry — tagged `latest` plus the immutable commit SHA, authenticated with the built-in `GITHUB_TOKEN` (no PATs) | [CD runs](https://github.com/M0ng00se7169/DDD_examples/actions/workflows/cd.yml) · [workflow](.github/workflows/cd.yml) · [packages](https://github.com/M0ng00se7169?tab=packages) |
+| **3 · Deploy** | `main-app` runs from the pinned GHCR tag via a deploy-specific compose file (no dev bind-mount, no `--reload`, no rebuild — compose's override merge cannot remove keys, so the file *replaces* the service) | [deploy & rollback runbook](docs/runbooks/deploy-and-rollback.md) |
+| **4 · Roll back** | Pin the previous good `APP_IMAGE=<sha>` in `.env`, re-run `up` — done in seconds, no `git revert`, no rebuild; the app is stateless by design (transactional outbox), so Mongo/Kafka/Alertmanager state survives the swap | [runbook → rollback](docs/runbooks/deploy-and-rollback.md) |
+
+The observability stack is part of the same story, not an afterthought: 6 alert rules, every one
+linked to a written runbook (`docs/runbooks/`), validated in CI so a malformed rule can't reach
+the live Prometheus — and the alerting design decisions are recorded in
+[ADR-0006](docs/adr/0006-metrics-implementation-plan.md) (metrics + rules, calibrated by a
+Locust load test) and [ADR-0007](docs/adr/0007-alertmanager-wiring.md) (Alertmanager routing,
+inhibition pairs, Telegram transport, silencing procedure).
 
 ---
 
@@ -411,37 +436,20 @@ empty. (Alert delivery to Telegram is a separate pipeline — see "Alerts" under
 
 
 
-## CI/CD
+## CI/CD (details)
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main`/`features` and on
-pull requests to `main`:
+The four CI jobs and the CD → GHCR flow are summarized with links in "Engineering Highlights"
+above; this section is the operational reference.
 
-| Job | Checks |
-| --- | --- |
-| **Lint** | the same pre-commit suite the repo enforces locally (pyupgrade, ruff, add-trailing-comma, isort) |
-| **Tests** | `poetry run pytest` — the full suite is self-contained (in-memory repositories; no Mongo/Kafka services needed) |
-| **Configs** | `promtool check config` (Prometheus + the 6 alert rules) and `amtool check-config` (Alertmanager routing) |
-| **Docker build** | the app image builds via Buildx with GHA layer caching (no push) |
-
-The configs job keeps the observability stack honest: a malformed alert rule or receiver fails
-CI before it can reach the running Prometheus/Alertmanager.
-
-Continuous delivery (`.github/workflows/cd.yml`) picks up from there: on every push to `main`
-it waits for the CI run on the same commit to succeed, then builds the image and pushes it to
-**GitHub Container Registry**:
-
-```bash
-docker pull ghcr.io/m0ng00se7169/ddd_examples:latest   # or by commit SHA
-```
-
-Auth is the workflow's built-in `GITHUB_TOKEN` (`packages: write`) — no PAT. CI's Docker job is
-skipped on `main` because CD builds the same SHA, so the image is built exactly once. Package
-visibility is set per-package on GHCR after the first push (independent of repo visibility).
-
-Deploying those images (and rolling a bad release back to a previous SHA tag):
-`docs/runbooks/deploy-and-rollback.md` — `deploy/compose/docker-compose.deploy.yml` runs
-`main-app` from the pinned GHCR tag instead of the dev build; rollback is pinning
-`APP_IMAGE=<sha>` in `.env` and re-running the compose `up`.
+- Triggers: CI runs on pushes to `main`/`features` and PRs to `main`; CD runs on pushes to
+  `main` (and manual dispatch).
+- CD gates on the CI run of the *same commit* before pushing; auth is the built-in
+  `GITHUB_TOKEN` (`packages: write`) — no PATs. CI's Docker job skips on `main` so each SHA is
+  built exactly once.
+- Tags: `latest` (default branch) + full commit SHA (immutable, rollback target). Package
+  visibility is per-package on GHCR, independent of repo visibility.
+- Deploy / rollback procedure: `docs/runbooks/deploy-and-rollback.md`
+  (`deploy/compose/docker-compose.deploy.yml` + `APP_IMAGE=<sha>` in `.env`).
 
 ---
 

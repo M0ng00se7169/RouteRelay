@@ -80,6 +80,11 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — README portfolio section: "Engineering Highlights".** Top-of-README 4-step
+  CI/CD story table (push/PR → merge → deploy → rollback) linking the CI/CD run pages, workflow
+  files, GHCR packages, the deploy-and-rollback runbook and ADR-0006/0007; H1 title + CD badge
+  added next to the CI badge. The lower "CI/CD" section slimmed to "CI/CD (details)" (operational
+  reference only) — job tables live once, in Highlights.
 - **2026-09-25 — Deploy + rollback path documented.** `docs/runbooks/deploy-and-rollback.md`:
   run the stack from CD's GHCR images and roll back by pinning
   `APP_IMAGE=ghcr.io/m0ng00se7169/ddd_examples:<sha>` in `.env` (never git-revert to roll back —
