@@ -1,0 +1,61 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; box-sizing: border-box; }
+  body {
+    width: 1280px; height: 640px; overflow: hidden;
+    font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+    background: linear-gradient(135deg, #0d1117 0%, #10213a 55%, #0d3a33 100%);
+    color: #e6edf3; position: relative;
+  }
+  .grid {
+    position: absolute; inset: 0;
+    background-image: radial-gradient(circle, #22d3ee22 1.5px, transparent 1.5px);
+    background-size: 28px 28px;
+  }
+  .wrap { position: absolute; inset: 0; padding: 60px 72px; display: flex; flex-direction: column; }
+  .logo { display: flex; align-items: center; gap: 22px; }
+  .dot {
+    width: 64px; height: 64px; border-radius: 16px;
+    background: linear-gradient(135deg, #22d3ee, #34d399);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; font-weight: 800; color: #062019;
+  }
+  h1 { font-size: 82px; letter-spacing: -1.5px; font-weight: 800; }
+  .sub { margin-top: 12px; font-size: 31px; color: #9fb0c3; }
+  .flow { display: flex; align-items: center; gap: 16px; margin-top: 52px; }
+  .node {
+    padding: 14px 24px; border: 1px solid #30363d; border-radius: 12px;
+    background: rgba(13, 17, 23, 0.8); font-size: 24px; color: #c9d1d9; white-space: nowrap;
+  }
+  .arrow { color: #22d3ee; font-size: 30px; font-weight: 700; }
+  .tags { margin-top: auto; display: flex; gap: 14px; flex-wrap: wrap; }
+  .tag {
+    padding: 9px 20px; border-radius: 999px; border: 1px solid #30363d;
+    font-size: 21px; color: #8b949e; background: #161b22;
+  }
+  .tag.hot { border-color: rgba(34, 211, 238, 0.35); color: #67e8f9; }
+</style>
+</head>
+<body>
+<div class="grid"></div>
+<div class="wrap">
+  <div class="logo"><div class="dot">R</div><h1>RouteRelay</h1></div>
+  <div class="sub">Dispatch-style chat for logistics &amp; support teams</div>
+  <div class="flow">
+    <div class="node">API</div><div class="arrow">&#8594;</div>
+    <div class="node">Mongo + Outbox</div><div class="arrow">&#8594;</div>
+    <div class="node">Relay</div><div class="arrow">&#8594;</div>
+    <div class="node">Kafka</div><div class="arrow">&#8594;</div>
+    <div class="node">WebSocket fan-out</div>
+  </div>
+  <div class="tags">
+    <span class="tag hot">DDD</span><span class="tag hot">CQRS</span><span class="tag hot">Event-Driven</span>
+    <span class="tag">FastAPI</span><span class="tag">Kafka</span><span class="tag">MongoDB</span>
+    <span class="tag">Prometheus</span><span class="tag">Alertmanager</span><span class="tag">CI/CD</span>
+  </div>
+</div>
+</body>
+</html>

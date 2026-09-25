@@ -11,6 +11,8 @@
 
 ## Engineering Highlights — the CI/CD story, end to end
 
+![RouteRelay request flow](docs/img/social-preview.png)
+
 Everything in this repository is wired the way a production team would run it: the same quality
 gates locally and in CI, a merge publishes a pinned image, and a bad release rolls back in
 seconds without a rebuild. Follow the trail:
