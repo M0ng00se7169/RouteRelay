@@ -91,6 +91,9 @@ jobs:
   docker-build:
     name: Docker image build
     runs-on: ubuntu-latest
+    # On main the CD pipeline builds and pushes the same SHA to GHCR —
+    # building twice would be pure duplication.
+    if: github.ref != 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
