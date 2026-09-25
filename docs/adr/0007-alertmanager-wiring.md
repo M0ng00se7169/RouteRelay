@@ -45,12 +45,12 @@ Alert inventory with the labels this plan relies on:
 
 | Alert | Severity | Route (§3) | Runbook |
 |---|---|---|---|
-| `OutboxRelayFailing` | warning | outbox | kafka-outage.md |
+| `OutboxRelayFailing` | warning | outbox | kafka-outage.md ✅ linked (Chunk 4) |
 | `OutboxRelayCircuitOpen` | warning | outbox | kafka-outage.md ✅ linked |
-| `OutboxBacklogGrowing` | warning | outbox | to be added (Chunk 4) |
-| `KafkaConsumerReconnecting` | warning | consumer | to be added (Chunk 4) |
-| `WSBroadcastFailures` | warning | realtime | to be added (Chunk 4) |
-| `KafkaConsumerDown` | **critical** | consumer | to be added (Chunk 4) |
+| `OutboxBacklogGrowing` | warning | outbox | kafka-outage.md ✅ linked (Chunk 4) |
+| `KafkaConsumerReconnecting` | warning | consumer | kafka-consumer.md ✅ linked (Chunk 4) |
+| `WSBroadcastFailures` | warning | realtime | ws-fanout.md ✅ linked (Chunk 4) |
+| `KafkaConsumerDown` | **critical** | consumer | kafka-consumer.md ✅ linked (Chunk 4) |
 
 ---
 
@@ -214,14 +214,18 @@ sidecar or reuse the app itself as the relay (it already owns a Telegram client)
 
 ---
 
-## 5. Chunk 4 — Hygiene: runbook links and silences
+## 5. Chunk 4 — Hygiene: runbook links and silences ✅ implemented 2026-09-25
+
+1. **Complete the `runbook_url` annotations** ✅ (was: only `OutboxRelayCircuitOpen` had one).
+   Same file, mechanical:
 
 1. **Complete the `runbook_url` annotations** (only `OutboxRelayCircuitOpen` has one today). Same
    file, mechanical:
-   - `OutboxRelayFailing`, `OutboxBacklogGrowing` → `docs/runbooks/kafka-outage.md`
-   - `KafkaConsumerDown`, `KafkaConsumerReconnecting` → new short runbook (consumer loop:
-     heartbeat semantics, backoff, restart procedure)
-   - `WSBroadcastFailures` → new short runbook (fan-out, dead-socket semantics)
+   - `OutboxRelayFailing`, `OutboxBacklogGrowing` → `docs/runbooks/kafka-outage.md` ✅
+   - `KafkaConsumerDown`, `KafkaConsumerReconnecting` → new runbook `docs/runbooks/kafka-consumer.md`
+     (consumer loop: heartbeat semantics, backoff, restart procedure) ✅
+   - `WSBroadcastFailures` → new runbook `docs/runbooks/ws-fanout.md` (fan-out, dead-socket
+     semantics) ✅
    - Re-run `promtool check config` and hot-reload Prometheus (`kill -HUP`) after each edit —
      both procedures already proven in this session.
 2. **Silences are the maintenance path — document, don't script.** Planned drills/deploys:
@@ -232,8 +236,9 @@ sidecar or reuse the app itself as the relay (it already owns a Telegram client)
    - post-drill: `amtool silences expire <id>`; `amtool silences query` is the pre-drill "am I
      silencing the right things" check.
    Add a "Silencing" section to the runbook rather than a separate doc.
-3. **Alertmanager self-monitoring** (optional, cheap): add a `scrape_configs` job
-   `alertmanager:9093` so `up{job="alertmanager"}` exists; one more `alertmanager` metric
+3. **Alertmanager self-monitoring** ✅ (done early in Chunk 2 because it was free): a
+   `scrape_configs` job `alertmanager:9093` so `up{job="alertmanager"}` exists; one more
+   `alertmanager` metric
    (`alertmanager_alerts`) may join the Grafana overview later — do NOT add panels before the
    receiver decision lands.
 
@@ -280,6 +285,15 @@ URLs):
 - **Deviation from the ADR sketch:** all three receivers use the webhook sink (the sketch's
   `default-log` alternative became the whole transport for now); self-monitoring (planned as
   optional in Chunk 4) was pulled into Chunk 2 because it was free.
+- **Chunk 4 (2026-09-25):** all 6 rules in `docker_compose/prometheus-alerts.yml` now carry
+  `runbook_url` (the 5 missing ones added): `OutboxRelayFailing`/`OutboxBacklogGrowing` →
+  `docs/runbooks/kafka-outage.md`; `KafkaConsumerDown`/`KafkaConsumerReconnecting` → new
+  `docs/runbooks/kafka-consumer.md` (heartbeat semantics, backoff, restart procedure);
+  `WSBroadcastFailures` → new `docs/runbooks/ws-fanout.md` (best-effort fan-out, dead-socket
+  semantics). Validated with promtool (6 rules) and hot-reloaded via `kill -HUP` — every rule
+  `health: ok` with its annotation via `/api/v1/rules`. The webhook sink appends `runbook_url`
+  to the logged alert message, so the links surface in the JSON logs automatically. The silencing
+  section of this chunk had already landed in `docs/runbooks/kafka-outage.md` with Chunks 1–3.
 
 ---
 

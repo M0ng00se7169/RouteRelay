@@ -176,7 +176,10 @@ baseline (50 users, ~16 msg/s: `outbox_pending` max=35, p95=21; relay drained to
 `docs/adr/0007-alertmanager-wiring.md`: severity-asymmetric routing, inhibition pairs
 (CircuitOpen mutes RelayFailing; ConsumerDown mutes Reconnecting), and receivers posting to the
 app's webhook sink `POST /ops/alerts` — every alert lands in the structured JSON logs
-(Loki/dashboard log panel) until a paging transport is chosen. Validate rules with
+(Loki/dashboard log panel) until a paging transport is chosen. **Every alert carries a
+`runbook_url` annotation** (`docs/runbooks/`: `kafka-outage.md` for the outbox/relay pair,
+`kafka-consumer.md` for the consumer pair, `ws-fanout.md` for broadcast failures), which the sink
+appends to the logged message. Validate rules with
 `promtool check rules` before merging rule changes.
 
 Metrics marked **candidate** in the registry above are the pool for future

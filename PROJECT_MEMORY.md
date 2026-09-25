@@ -80,6 +80,17 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — ADR-0007 Chunk 4: runbook_url annotations complete (6/6 alerts).** The 5
+  previously bare alerts in `docker_compose/prometheus-alerts.yml` gained `runbook_url`:
+  `OutboxRelayFailing`/`OutboxBacklogGrowing` → existing `docs/runbooks/kafka-outage.md`; the
+  consumer pair → new `docs/runbooks/kafka-consumer.md` (documents that `kafka_consumer_up` stays 1
+  through reconnect backoff and drops only on non-cancelled task death; `KAFKA_CONSUMER_BACKOFF_*`
+  knobs; consumer restart = app restart, messages retained in the topic); `WSBroadcastFailures` →
+  new `docs/runbooks/ws-fanout.md` (best-effort fan-out, one dead socket no longer aborts the
+  broadcast, failures = client instability, no app restart). Validated: promtool 6 rules SUCCESS,
+  `kill -HUP prometheus`, all 6 `health: ok` with runbook_url via `/api/v1/rules`. Sink appends
+  runbook_url to log lines automatically. ADR-0007 §5/§9 + architecture.md + README synced.
+  No code changes; test count unchanged (217).
 - **2026-09-25 — ADR-0007 Chunks 1-3 implemented (webhook-sink transport, no external creds).**
   Alertmanager runs in the stack (`docker_compose/alertmanager.yaml` +
   `alertmanager/alertmanager.yml`, `ALERTMANAGER_PORT=9093` in both env files, make targets

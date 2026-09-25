@@ -1,6 +1,6 @@
 ## What This Project Is
 
-**Simple Kafka Chat** is an educational/reference FastAPI application that implements a multi-user chat backend using **Domain-Driven Design (DDD)**, **CQRS**, and **event-driven architecture** with **Apache Kafka**. Chats and messages are persisted in **MongoDB**, clients can subscribe to live updates over **WebSockets**, and there is groundwork for **Telegram** notifications when listeners are added to a chat.
+**Simple Kafka Chat** is a FastAPI application that implements a multi-user chat backend using **Domain-Driven Design (DDD)**, **CQRS**, and **event-driven architecture** with **Apache Kafka**. Chats and messages are persisted in **MongoDB**, clients can subscribe to live updates over **WebSockets**, and there is groundwork for **Telegram** notifications when listeners are added to a chat.
 
 ---
 
@@ -118,7 +118,8 @@ Kafka failures; recovery via the half-open probe is automatic),
 Alerts are routed through **Alertmanager** (`docker_compose/alertmanager.yaml`, per
 `docs/adr/0007-alertmanager-wiring.md`) with severity-based routing and inhibition; notifications
 post to the app's `/ops/alerts` webhook sink, so every alert appears in the structured JSON logs.
-See `docs/architecture.md` → "Alert rules" for the full table.
+Every alert carries a `runbook_url` annotation into `docs/runbooks/`. See `docs/architecture.md`
+→ "Alert rules" for the full table.
 
 Quick check that the endpoint is live:
 

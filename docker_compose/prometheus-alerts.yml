@@ -42,6 +42,7 @@ groups:
           severity: warning
         annotations:
           summary: 'Outbox backlog is growing ({{ $value }} unsent rows)'
+          runbook_url: 'docs/runbooks/kafka-outage.md'
           description: 'outbox_pending has been above 200 for 5 minutes — the relay is not draining the outbox (Kafka down, relay crashed, or producers outpacing it).'
 
       - alert: OutboxRelayFailing
@@ -50,6 +51,7 @@ groups:
           severity: warning
         annotations:
           summary: 'Outbox relay is failing to publish ({{ $value }} errors/s)'
+          runbook_url: 'docs/runbooks/kafka-outage.md'
           description: 'The relay recorded publish errors in the last 5 minutes; failed rows stay unsent and are retried on the next tick.'
 
       - alert: OutboxRelayCircuitOpen
@@ -67,6 +69,7 @@ groups:
           severity: critical
         annotations:
           summary: 'Kafka consumer loop is down while the app is up'
+          runbook_url: 'docs/runbooks/kafka-consumer.md'
           description: 'kafka_consumer_up is 0 while the kafka-chat-api target is healthy — inbound broker messages are not reaching the WebSocket fan-out.'
 
       - alert: KafkaConsumerReconnecting
@@ -75,6 +78,7 @@ groups:
           severity: warning
         annotations:
           summary: 'Kafka consumer reconnected recently ({{ $value }} in 15m)'
+          runbook_url: 'docs/runbooks/kafka-consumer.md'
           description: 'The consumer loop reconnected to Kafka at least once in the last 15 minutes — the broker stream died (restart, network blip) or ended cleanly. Delivery self-heals via exponential backoff; if this repeats, investigate Kafka stability. Consumer death is covered by KafkaConsumerDown.'
 
       - alert: WSBroadcastFailures
@@ -83,4 +87,5 @@ groups:
           severity: warning
         annotations:
           summary: 'WebSocket fan-out failures ({{ $value }} failures/s)'
+          runbook_url: 'docs/runbooks/ws-fanout.md'
           description: 'Per-socket send failures during fan-out in the last 5 minutes — clients are dropping mid-broadcast (dead sockets no longer abort the fan-out, but the failures signal client instability).'
