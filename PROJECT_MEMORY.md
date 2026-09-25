@@ -80,6 +80,14 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — DECIDED (deferred): PEP 621 `[project]` migration waits for the first green CI
+  run.** `pyproject.toml` still uses legacy `[tool.poetry]` (`poetry check` warns about it).
+  Migration is NOT a pyproject-only change: Poetry 1.8.2 (pinned in Dockerfile + CI) cannot read
+  `[project]` — it requires bumping the pin to 2.1.3 (matches the local install, which also kills
+  the local-2.x lock gotcha above) AND replacing the Dockerfile's `poetry export` calls (2.x
+  needs `poetry-plugin-export` installed explicitly, or a different reqs strategy). Do it as its
+  own small PR after CI is proven green on 1.8.2 — never in the same PR as the first pipeline
+  run, so failures stay attributable.
 - **2026-09-25 — Repo polish: MIT LICENSE + ipython out of the prod image.** Added `LICENSE`
   (MIT, © M0ng00se7169); moved `ipython` from runtime deps to the dev group (it was shipped into
   the prod image via the Dockerfile's `poetry export`) and filled the empty pyproject
