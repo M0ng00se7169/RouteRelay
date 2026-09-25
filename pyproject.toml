@@ -1,38 +1,43 @@
-[tool.poetry]
+[project]
 name = "routerelay"
 version = "0.1.0"
 description = "Multi-user chat backend demonstrating DDD, CQRS, and event-driven architecture with FastAPI, Kafka, and MongoDB, plus a full observability and CI/CD stack."
-authors = ["M0ng00se7169 <nickkomarowski@gmail.com>"]
+authors = [
+    { name = "M0ng00se7169", email = "nickkomarowski@gmail.com" },
+]
 readme = "README.md"
+requires-python = ">=3.11,<4.0"
+dependencies = [
+    "fastapi[httpx]>=0.115.2,<0.116",
+    "motor>=3.6.0,<4",
+    "uvicorn[all]>=0.32.0,<0.33",
+    "httpx>=0.27.2,<0.28",
+    "pydantic-settings>=2.6.0,<3",
+    "orjson>=3.10.10,<4",
+    "websockets>=13.1,<14",
+    "aiokafka==0.10.0",
+    "aiojobs>=1.3.0,<2",
+    "prometheus-client>=0.21.0,<0.22",
+    "prometheus-fastapi-instrumentator>=7.0.0,<8",
+    "punq>=0.7.0,<0.8",
+    "python-multipart>=0.0.32,<0.1",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-fastapi = {extras = ["httpx"], version = "^0.115.2"}
-motor = "^3.6.0"
-uvicorn = { extras = ["all"], version = "^0.32.0" }
-httpx = "^0.27.2"
-pydantic-settings = "^2.6.0"
-orjson = "^3.10.10"
-websockets = "^13.1"
-aiokafka = "0.10.0"
-aiojobs = "^1.3.0"
-prometheus-client = "^0.21.0"
-prometheus-fastapi-instrumentator = "^7.0.0"
-punq = "^0.7.0"
-python-multipart = "^0.0.32"
+[dependency-groups]
+dev = [
+    "ipython>=8.28.0,<9",
+    "pytest>=8.3.3,<9",
+    "pytest-asyncio>=0.24.0,<0.25",
+    "faker>=30.6.0,<31",
+    "pre-commit>=4.0.1,<5",
+    "ruff>=0.15.22,<0.16",
+]
 
-
-[tool.poetry.group.dev.dependencies]
-ipython = "^8.28.0"
-pytest = "^8.3.3"
-pytest-asyncio = "^0.24.0"
-faker = "^30.6.0"
-pre-commit = "^4.0.1"
-ruff = "^0.15.22"
-
-[build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+# This repository is an application, not an installable distribution:
+# Poetry stays in package-mode=false so `poetry install` manages the
+# environment without trying to build/install the project itself.
+[tool.poetry]
+package-mode = false
 
 [tool.ruff]
 line-length = 100
