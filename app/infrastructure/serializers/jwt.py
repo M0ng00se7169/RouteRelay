@@ -5,9 +5,13 @@ import hashlib
 import hmac
 import json
 import time
-from typing import Any, Optional
+from typing import (
+    Any,
+    Optional,
+)
 
 from settings.config import Config
+
 
 # HS256 spec: base64url encode without padding
 def _b64url_encode(data: bytes) -> str:
