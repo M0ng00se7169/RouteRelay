@@ -10,8 +10,21 @@ services:
       - ./alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       # Notification/silence state survives restarts (ADR-0007 Chunk 2).
       - alertmanager-data:/alertmanager
+    secrets:
+      - telegram_bot_token
+      - telegram_chat_id
     networks:
       - backend
+
+secrets:
+  # Bind-mount FILE secrets (not secret objects): the values live in gitignored
+  # files (docker_compose/alertmanager/secrets/), so the Telegram bot token never
+  # lands in git or `docker inspect`. Alertmanager's config cannot expand env
+  # vars, hence bot_token_file/chat_id_file in alertmanager.yml.
+  telegram_bot_token:
+    file: ./alertmanager/secrets/telegram_bot_token
+  telegram_chat_id:
+    file: ./alertmanager/secrets/telegram_chat_id
 
 volumes:
   alertmanager-data:

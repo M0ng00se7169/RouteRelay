@@ -174,9 +174,12 @@ baseline (50 users, ~16 msg/s: `outbox_pending` max=35, p95=21; relay drained to
 (`loadtest/locustfile.py`). Alerts are delivered to **Alertmanager**
 (`docker_compose/alertmanager.yaml`, UI at `:${ALERTMANAGER_PORT}`) per
 `docs/adr/0007-alertmanager-wiring.md`: severity-asymmetric routing, inhibition pairs
-(CircuitOpen mutes RelayFailing; ConsumerDown mutes Reconnecting), and receivers posting to the
-app's webhook sink `POST /ops/alerts` — every alert lands in the structured JSON logs
-(Loki/dashboard log panel) until a paging transport is chosen. **Every alert carries a
+(CircuitOpen mutes RelayFailing; ConsumerDown mutes Reconnecting). `oncall-critical` and
+`team-warnings` deliver **twice**: to **Telegram** (built-in `telegram_configs` receiver; token
+and chat id come from gitignored secret files mounted via compose secrets — see
+`docs/adr/0007-alertmanager-wiring.md` §4) and to the app's webhook sink `POST /ops/alerts` —
+so every alert lands in Telegram AND in the structured JSON logs (Loki/dashboard log panel);
+`default-log` is webhook-only. **Every alert carries a
 `runbook_url` annotation** (`docs/runbooks/`: `kafka-outage.md` for the outbox/relay pair,
 `kafka-consumer.md` for the consumer pair, `ws-fanout.md` for broadcast failures), which the sink
 appends to the logged message. Validate rules with

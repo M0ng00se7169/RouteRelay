@@ -7,3 +7,7 @@ __pycache__/
 skills-lock.json
 .openclaude/.scratch/
 .agent/runs/
+docs/pi-spec/
+.pi/
+.freebuff/
+docker_compose/alertmanager/secrets/
