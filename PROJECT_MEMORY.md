@@ -80,7 +80,15 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
-- **2026-09-25 — CD to GHCR added.** `.github/workflows/cd.yml`: on push to `main` → wait for
+- **2026-09-25 — Deploy + rollback path documented.** `docs/runbooks/deploy-and-rollback.md`:
+  run the stack from CD's GHCR images and roll back by pinning
+  `APP_IMAGE=ghcr.io/m0ng00se7169/ddd_examples:<sha>` in `.env` (never git-revert to roll back —
+  that triggers a fresh CD build). New `deploy/compose/docker-compose.deploy.yml` REPLACES
+  `main-app` (compose `-f` override merge cannot remove keys — an `image:` override over
+  `app.yaml` would still hit its `build:` and repo bind-mount + `--reload`; verified via
+  `docker compose config`: no build/volumes in the rendered merge, APP_IMAGE resolves).
+  Blast-radius table: Mongo/Kafka/AM state survives an app swap; the app is stateless by design
+  (outbox). `.github/workflows/cd.yml`: on push to `main` → wait for
   the CI run's `Tests (pytest)` check on the same SHA (`lewagon/wait-on-check-action`) → buildx
   build + push to `ghcr.io/m0ng00se7169/ddd_examples` (tags: `latest` on the default branch +
   full commit SHA via metadata-action; GHA layer cache). Auth is the built-in `GITHUB_TOKEN`

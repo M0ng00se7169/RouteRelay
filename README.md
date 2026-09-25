@@ -438,6 +438,11 @@ Auth is the workflow's built-in `GITHUB_TOKEN` (`packages: write`) — no PAT. C
 skipped on `main` because CD builds the same SHA, so the image is built exactly once. Package
 visibility is set per-package on GHCR after the first push (independent of repo visibility).
 
+Deploying those images (and rolling a bad release back to a previous SHA tag):
+`docs/runbooks/deploy-and-rollback.md` — `deploy/compose/docker-compose.deploy.yml` runs
+`main-app` from the pinned GHCR tag instead of the dev build; rollback is pinning
+`APP_IMAGE=<sha>` in `.env` and re-running the compose `up`.
+
 ---
 
 ## Makefile Commands
