@@ -116,11 +116,8 @@ Key wiring facts:
 detail (O-1 … O-3) plus a one-line index of the 8 formerly-listed issues (all verified fixed).
 Summary:
 
-1. ~~**O-1 (High): Kafka consumer loop has no reconnect**~~ — **fixed 2026-09-25** (see §4).
-2. **O-2 (Low): outbox relay not circuit-breaker-guarded** — nice-to-have; wrap
+1. **O-2 (Low): outbox relay not circuit-breaker-guarded** — nice-to-have; wrap
    `message_broker.send_message` with a `'kafka'` breaker to skip doomed sends during outages.
-3. ~~**O-3 (Low): `ruff` missing from the poetry env**~~ — **fixed 2026-09-25** (see §4).
-   Lint now: `cd app && poetry run ruff check <changed files>` (v0.15.22, matches pre-commit).
 
 ---
 
