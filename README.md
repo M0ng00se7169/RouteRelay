@@ -1,6 +1,8 @@
 ## What This Project Is
 
-**Simple Kafka Chat** is an educational/reference FastAPI application that implements a multi-user chat backend using **Domain-Driven Design (DDD)**, **CQRS**, and **event-driven architecture** with **Apache Kafka**. Chats and messages are persisted in **MongoDB**, clients can subscribe to live updates over **WebSockets**, and there is groundwork for **Telegram** notifications when listeners are added to a chat.
+[![CI](https://github.com/M0ng00se7169/DDD_examples/actions/workflows/ci.yml/badge.svg)](https://github.com/M0ng00se7169/DDD_examples/actions/workflows/ci.yml)
+
+**Simple Kafka Chat** is a FastAPI application that implements a multi-user chat backend using **Domain-Driven Design (DDD)**, **CQRS**, and **event-driven architecture** with **Apache Kafka**. Chats and messages are persisted in **MongoDB**, clients can subscribe to live updates over **WebSockets**, and there is groundwork for **Telegram** notifications when listeners are added to a chat.
 
 ---
 
@@ -41,15 +43,32 @@
 The codebase follows a layered, DDD-style layout:
 
 ```
-app/
-├── application/     # HTTP/WebSocket API (FastAPI routers, schemas)
-├── domain/          # Entities, value objects, domain events, exceptions
-├── logic/           # Commands, queries, event handlers, Mediator
-├── infrastructure/  # MongoDB repos, Kafka broker, WebSocket manager, Telegram
-├── settings/        # Environment-based configuration
-└── test/            # Unit and API tests
+fastapi_examples/
+├── app/                 # layered DDD layout — see "Architecture" below
+│   ├── application/     # HTTP/WebSocket API (FastAPI routers, schemas)
+│   ├── domain/          # Entities, value objects, domain events, exceptions
+│   ├── logic/           # Commands, queries, event handlers, Mediator
+│   ├── infrastructure/  # MongoDB repos, Kafka broker, WebSocket manager, Telegram
+│   ├── settings/        # Environment-based configuration
+│   └── test/            # Unit and API tests                         
+├── docker_compose/
+│   ├── app.yaml
+│   ├── storages.yaml
+│   ├── kafka.yaml
+│   ├── prometheus.yaml
+│   ├── observability.yaml        # Loki + Promtail + Grafana
+│   ├── loki/loki-config.yaml
+│   ├── promtail/promtail-config.yaml
+│   └── grafana/provisioning/     # datasources + kafka-chat-overview dashboard
+├── loadtest/                     # Locust load-test harness
+├── Dockerfile
+├── Makefile
+├── prometheus.yml
+├── pyproject.toml
+└── poetry.lock
 ```
 
+---
 
 
 ### Core patterns
@@ -103,22 +122,17 @@ to the registry module — never ad-hoc in feature modules.
 #### Alerts (Prometheus rules)
 
 `docker_compose/prometheus-alerts.yml` (loaded via `rule_files` in
-`prometheus.yml`) defines six alerts: `OutboxBacklogGrowing`
-(`outbox_pending > 200 for 5m` — calibrated from a Locust baseline: 50 users,
-~16 msg/s produced `outbox_pending` max=35, so 200 is ~6x the observed peak and
-2x the relay's per-tick drain capacity), `OutboxRelayFailing`,
-`OutboxRelayCircuitOpen` (`increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0`
-— the relay's 'kafka' circuit breaker is skipping outbox batches after repeated
-Kafka failures; recovery via the half-open probe is automatic),
-`KafkaConsumerDown`
-(critical; guarded by the app's `up` so a dead target doesn't double-page),
-`KafkaConsumerReconnecting` (`increase(kafka_consumer_reconnects_total[15m]) > 0`
-— recency signal for broker stream death; reconnects self-heal via backoff), and
-`WSBroadcastFailures`.
-Alerts are routed through **Alertmanager** (`docker_compose/alertmanager.yaml`, per
-`docs/adr/0007-alertmanager-wiring.md`) with severity-based routing and inhibition; notifications
-post to the app's `/ops/alerts` webhook sink, so every alert appears in the structured JSON logs.
-See `docs/architecture.md` → "Alert rules" for the full table.
+`prometheus.yml`) defines six alerts: `OutboxBacklogGrowing`, `OutboxRelayFailing`,
+`OutboxRelayCircuitOpen`, `KafkaConsumerDown` (critical), `KafkaConsumerReconnecting`,
+and `WSBroadcastFailures`. Alerts are routed through **Alertmanager**
+(`docker_compose/alertmanager.yaml`, per `docs/adr/0007-alertmanager-wiring.md`) with
+severity-based routing and inhibition; oncall-critical and team-warnings deliver to both
+**Telegram** (built-in receiver; credentials in gitignored secret files, never committed) and
+the app's `/ops/alerts` webhook sink, so every alert appears in Telegram and in the structured
+JSON logs. Every alert carries a `runbook_url` annotation into `docs/runbooks/`
+(`kafka-outage.md`, `kafka-consumer.md`, `ws-fanout.md`). Expressions, thresholds (including
+the Locust-calibrated `outbox_pending` limit) and the full table: `docs/architecture.md`
+→ "Alert rules".
 
 Quick check that the endpoint is live:
 
@@ -182,41 +196,6 @@ sequenceDiagram
 
 
 ---
-
-
-
-## Project Structure (detailed)
-
-```
-fastapi_examples/
-├── app/
-│   ├── application/api/          # FastAPI entrypoint, routes, WebSockets
-│   ├── domain/                   # DDD core (entities, events, values)
-│   ├── infrastructure/           # Adapters (Mongo, Kafka, WS, Telegram)
-│   ├── logic/                    # Application services (CQRS + mediator)
-│   ├── settings/                 # Config
-│   ├── test/                     # Tests
-│   ├── kafka_test_producer.py    # Kafka smoke-test script
-│   └── kafka_test_consumer.py    # Kafka smoke-test script
-├── docker_compose/
-│   ├── app.yaml
-│   ├── storages.yaml
-│   ├── kafka.yaml
-│   ├── prometheus.yaml
-│   ├── observability.yaml        # Loki + Promtail + Grafana
-│   ├── loki/loki-config.yaml
-│   ├── promtail/promtail-config.yaml
-│   └── grafana/provisioning/     # datasources + kafka-chat-overview dashboard
-├── loadtest/                     # Locust load-test harness
-├── Dockerfile
-├── Makefile
-├── prometheus.yml
-├── pyproject.toml
-└── poetry.lock
-```
-
----
-
 
 
 ## API Reference
@@ -306,6 +285,7 @@ Settings are loaded from environment variables via `settings/config.py`:
 | `GRAFANA_PORT`                | `3000`                      | Grafana port (Docker) |
 | `GRAFANA_ADMIN_USER`          | `admin`                     | Grafana admin login |
 | `GRAFANA_ADMIN_PASSWORD`      | `admin`                     | Grafana admin password |
+| `ALERTMANAGER_PORT`           | `9093`                      | Alertmanager UI/API port (Docker) |
 | `API_PORT`                    | (required in Docker)      | Host port for the app   |
 
 
@@ -343,6 +323,7 @@ LOKI_PORT=3100
 GRAFANA_PORT=3000
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=admin
+ALERTMANAGER_PORT=9093
 ```
 
 
@@ -370,6 +351,7 @@ make app        # FastAPI application
 | Mongo Express | [http://localhost:28081](http://localhost:28081)                 |
 | Kafka UI      | [http://localhost:8090](http://localhost:8090)                   |
 | Prometheus    | [http://localhost:9090](http://localhost:9090)                   |
+| Alertmanager  | [http://localhost:9093](http://localhost:9093)                   |
 | Loki          | [http://localhost:3100](http://localhost:3100)                   |
 | Grafana       | [http://localhost:3000](http://localhost:3000)                   |
 
@@ -400,6 +382,8 @@ poetry run pre-commit install
 poetry run pre-commit run --all-files
 ```
 
+The same suite runs as the **Lint** job in CI (see below) — if it passes locally, CI stays green.
+
 ### 7. Load testing (Locust)
 
 `loadtest/locustfile.py` drives the API to exercise the metrics behind the
@@ -415,38 +399,56 @@ See `loadtest/README.md` for the web-UI mode and what endpoints it hits. Watch
 `http_requests_total` and the outbox counters move in Grafana.
 
 
-### 9. Telegram Notification Integration
-The system now supports receiving notifications when a user adds a listener to a chat.
+### 8. Telegram notifications for chat listeners
 
-- **Feature:** When a user sends a `POST /chat/{chat_oid}/listeners/` request, the system registers the listener in MongoDB.
-- **Event Flow:** This action publishes a `ListenerAddedEvent` to Kafka. The `ListenerAddedEventHandler` now includes logic to use the `TelegramNotificationClient` (registered in `app/logic/init.py`) to send a notification to the user's configured `telegram_chat_id`.
-
-This completes the feature implementation, requiring no further setup beyond the standard Docker Compose stack.
-`make all` brings up Loki, Promtail, and Grafana alongside the app. Grafana is
-pre-provisioned with Prometheus + Loki datasources and the `kafka-chat-overview`
-dashboard, so metrics and `{container="main-app"}` logs are visible immediately
-after login (credentials from `.env`).
+`POST /chat/{chat_oid}/listeners/` stores the listener and publishes `ListenerAddedEvent`
+(see the events table above); `ListenerAddedEventHandler` then notifies it via
+`TelegramNotificationClient` (wired in `app/logic/init.py`). Set `TELEGRAM_BOT_TOKEN` and
+`TELEGRAM_CHAT_ID` in `.env` to enable delivery — notifications are skipped while the token is
+empty. (Alert delivery to Telegram is a separate pipeline — see "Alerts" under Observability.)
 
 ---
 
 
+
+## CI/CD
+
+GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main`/`features` and on
+pull requests to `main`:
+
+| Job | Checks |
+| --- | --- |
+| **Lint** | the same pre-commit suite the repo enforces locally (pyupgrade, ruff, add-trailing-comma, isort) |
+| **Tests** | `poetry run pytest` — the full suite is self-contained (in-memory repositories; no Mongo/Kafka services needed) |
+| **Configs** | `promtool check config` (Prometheus + the 6 alert rules) and `amtool check-config` (Alertmanager routing) |
+| **Docker build** | the app image builds via Buildx with GHA layer caching (no push) |
+
+The configs job keeps the observability stack honest: a malformed alert rule or receiver fails
+CI before it can reach the running Prometheus/Alertmanager.
+
+---
 
 ## Makefile Commands
 
 
 | Target                | Action                          |
 | --------------------- | ------------------------------- |
-| `make all`            | Start storages + app + Kafka + Prometheus + observability (Loki/Promtail/Grafana) |
+| `make all`            | Start everything: storages + app + Kafka + Prometheus + Alertmanager + observability (Loki/Promtail/Grafana) |
 | `make app`            | Start FastAPI container         |
 | `make storages`       | Start MongoDB replica-set stack |
 | `make kafka`          | Start Kafka stack               |
-| `make prometheus`     | Start Prometheus + scrape config |
+| `make prometheus`     | Start Prometheus + Alertmanager (plus app + Kafka, so they share the backend network) |
 | `make observability`  | Start Loki + Promtail + Grafana only |
 | `make all-down`       | Stop everything                 |
+| `make app-down`       | Stop the app                    |
+| `make storages-down`  | Stop the storage stack          |
+| `make kafka-down`     | Stop the Kafka stack            |
+| `make prometheus-down`| Stop Prometheus + Alertmanager (+ app + Kafka) |
 | `make observability-down` | Stop observability stack    |
 | `make app-shell`      | Shell into `main-app` container |
 | `make app-logs`       | Follow app logs                 |
-| `make prometheus-logs`| Follow Prometheus logs          |
-| `make observability-logs` | Follow observability logs   |
+| `make kafka-logs`     | Follow Kafka stack logs         |
+| `make prometheus-logs`| Follow Prometheus + app logs    |
+| `make observability-logs` | Follow observability stack logs |
 
 

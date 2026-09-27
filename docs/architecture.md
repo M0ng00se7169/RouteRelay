@@ -12,8 +12,9 @@ Multi-user chat backend with **DDD**, **CQRS**, and event-driven architecture.
 | Database | MongoDB + Motor (async driver) |
 | Message bus | Apache Kafka |
 | DI container | Punq |
-| ORM/Access | SQLAlchemy 2.0 |
-| Logging | Loguru |
+| Logging | stdlib logging → JSON lines (`infrastructure/logging_config.py`, parsed by Promtail) |
+
+(Full stack incl. tooling and versions: README → "Technology Stack".)
 
 ### Architecture Patterns
 
@@ -45,46 +46,42 @@ app/
 ```
 POST /chat/{id}/messages
   ↓
-application/api/messages/handlers.py
-  ↓
-mediator.handle_command(CreateMessageCommand)
+application/api/messages/handlers.py → mediator.handle_command(CreateMessageCommand)
   ↓
 CreateMessageCommandHandler
-  (validates chat exists, builds Message, saves via messages_repository)
-  ↓
-mediator.publish(chat.pull_events())
-  ↓
-NewMessageReceivedEventHandler (Kafka + WebSocket publish)
+  (validates chat exists, builds Message, saves the message AND the outbox row
+   in ONE Mongo transaction, then publishes the in-process domain events)
   ↓
 response
 ```
+
+Background tasks started in the app lifespan:
+
+- **Outbox relay** (`infrastructure/outbox/relay.py`) polls unsent outbox rows, publishes each
+  to its Kafka topic, marks it sent — it is the **only** Kafka writer. Sends are guarded by the
+  `'kafka'` circuit breaker (open ⇒ the batch is skipped and retried later).
+- **Consumer loop** (`application/api/lifespan.py`) consumes the topic and publishes
+  `NewMessageReceivedFromBrokerEvent` → WebSocket fan-out to the chat room.
+
+In-process event handlers (`logic/events/messages.py`) keep only side effects like the WebSocket
+disconnect on chat deletion — they never send to Kafka directly. Full sequence diagram:
+README → "Request flow (create message)".
 
 ---
 
 ## Service URLs
 
-After starting with `make all`:
-
-| Service | URL |
-|---------|-----|
-| API docs | `http://localhost:8000/api/docs` |
-| Mongo Express | `:28081` |
-| Kafka UI | `:8090` |
-| Prometheus metrics | `:9090` |
+Listed in README → "Access services" (API docs, Mongo Express, Kafka UI, Prometheus,
+Alertmanager, Loki, Grafana — ports from `.env` after `make all`).
 
 ---
 
 ## Makefile Targets
 
-| Target | Action |
-|--------|--------|
-| `make all` | Bring up storages + app + Kafka |
-| `make storages` | MongoDB + Postgres only |
-| `make kafka` | Kafka only |
-| `make app` | App + services + Kafka |
-| `make all-down` | Shutdown all services |
-| `make app-shell` | Terminal for the app |
-| `make app-logs` | Tail app logs |
+Listed in README → "Makefile Commands" (up/down/logs per stack, plus `app-shell`). Note the
+multi-service targets (`all`, `prometheus`) intentionally merge several compose files so the
+services share the `backend` network — keep each target's file list symmetric between `up`
+and `down`, or compose warns about orphan containers.
 
 ---
 
@@ -123,7 +120,7 @@ alerting on once an operational baseline exists (ADR-0006 Q1), no rule yet;
 | `http_request_duration_seconds` | Histogram | handler, method, status | instrumentator (default) | HTTP request latency distribution | candidate — p95 latency |
 | `outbox_published_total` | Counter | — | outbox relay (`outbox/relay.py`) | Outbox rows successfully published to Kafka | no — a stall surfaces in `outbox_pending` |
 | `outbox_publish_errors_total` | Counter | — | outbox relay (`outbox/relay.py`) | Outbox rows that failed to publish (retried next tick) | ✅ alerted — `OutboxRelayFailing` |
-| `outbox_pending` | Gauge | — | outbox relay (`outbox/relay.py`) | Unsent outbox rows — true backlog (not capped by batch size) | ✅ alerted — `OutboxBacklogGrowing` (threshold is the ADR Q1 placeholder) |
+| `outbox_pending` | Gauge | — | outbox relay (`outbox/relay.py`) | Unsent outbox rows — true backlog (not capped by batch size) | ✅ alerted — `OutboxBacklogGrowing` (threshold calibrated from the 2026-09-17 Locust baseline) |
 | `kafka_messages_sent_total` | Counter | topic | outbox relay (`outbox/relay.py`) | Messages handed to the Kafka producer, per topic | no — volume/attribution |
 | `outbox_publish_duration_seconds` | Histogram | topic | outbox relay (`outbox/relay.py`) | Per-row send latency, including failed attempts (timeout latency during a Kafka outage) | candidate — p95 per topic |
 | `kafka_messages_consumed_total` | Counter | topic | consumer loop (`api/lifespan.py`) | Broker messages received (counted before parsing) | no — the consumed-vs-published gap is the health signal |
@@ -163,7 +160,7 @@ Prometheus evaluates the rules in `docker_compose/prometheus-alerts.yml`
 |---|---|---|---|
 | `OutboxBacklogGrowing` | `outbox_pending > 200 for 5m` | warning | the relay stops draining the outbox (Kafka outage, dead relay, producers outpacing it) |
 | `OutboxRelayFailing` | `rate(outbox_publish_errors_total[5m]) > 0` | warning | the relay recorded publish errors in the last 5m — rows stay unsent and retry |
-| `OutboxRelayCircuitOpen` | `increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0` | warning | the relay's 'kafka' circuit breaker is rejecting sends — outbox batches are skipped while the breaker stays open (which also quiets `OutboxRelayFailing`); rows drain once the half-open probe succeeds — response: `docs/runbooks/kafka-outage.md` |
+| `OutboxRelayCircuitOpen` | `increase(circuit_breaker_rejected_total{name='kafka'}[15m]) > 0` | warning | the relay's 'kafka' circuit breaker is rejecting sends — outbox batches are skipped while the breaker stays open (which also quiets `OutboxRelayFailing`); rows drain once the half-open probe succeeds |
 | `KafkaConsumerDown` | `kafka_consumer_up == 0 and up{job='kafka-chat-api'} == 1` | critical | the consumer loop task is dead while the app itself is up — inbound messages stop reaching the fan-out |
 | `KafkaConsumerReconnecting` | `increase(kafka_consumer_reconnects_total[15m]) > 0` | warning | at least one consumer reconnect in the last 15m — the broker stream died or exited cleanly; delivery self-heals via backoff, repeated firing signals Kafka instability |
 | `WSBroadcastFailures` | `rate(ws_broadcast_failures_total[5m]) > 0` | warning | per-socket send failures during fan-out (clients dropping mid-broadcast) |
@@ -174,9 +171,15 @@ baseline (50 users, ~16 msg/s: `outbox_pending` max=35, p95=21; relay drained to
 (`loadtest/locustfile.py`). Alerts are delivered to **Alertmanager**
 (`docker_compose/alertmanager.yaml`, UI at `:${ALERTMANAGER_PORT}`) per
 `docs/adr/0007-alertmanager-wiring.md`: severity-asymmetric routing, inhibition pairs
-(CircuitOpen mutes RelayFailing; ConsumerDown mutes Reconnecting), and receivers posting to the
-app's webhook sink `POST /ops/alerts` — every alert lands in the structured JSON logs
-(Loki/dashboard log panel) until a paging transport is chosen. Validate rules with
+(CircuitOpen mutes RelayFailing; ConsumerDown mutes Reconnecting). `oncall-critical` and
+`team-warnings` deliver **twice**: to **Telegram** (built-in `telegram_configs` receiver; token
+and chat id come from gitignored secret files mounted via compose secrets — see
+`docs/adr/0007-alertmanager-wiring.md` §4) and to the app's webhook sink `POST /ops/alerts` —
+so every alert lands in Telegram AND in the structured JSON logs (Loki/dashboard log panel);
+`default-log` is webhook-only. **Every alert carries a
+`runbook_url` annotation** (`docs/runbooks/`: `kafka-outage.md` for the outbox/relay pair,
+`kafka-consumer.md` for the consumer pair, `ws-fanout.md` for broadcast failures), which the sink
+appends to the logged message. Validate rules with
 `promtool check rules` before merging rule changes.
 
 Metrics marked **candidate** in the registry above are the pool for future

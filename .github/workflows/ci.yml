@@ -1,0 +1,107 @@
+name: CI
+
+# Quality gates for the kafka-chat backend. Mirrors the project's real
+# workflow: the pre-commit suite (pyupgrade, ruff, add-trailing-comma,
+# isort — the repo deliberately does NOT use `ruff format`), the pytest
+# suite (fully self-contained: in-memory repositories, no Mongo/Kafka
+# needed), config validation for the observability stack (promtool +
+# amtool), and a build check for the app image.
+
+on:
+  push:
+    branches: [main, features]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: Lint (pre-commit suite)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Cache pre-commit environments
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pre-commit
+          key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
+
+      - name: Install pre-commit
+        run: pip install pre-commit==4.0.1
+
+      # Same gate the repo enforces locally; --all-files keeps CI honest even
+      # when a commit touches files the hooks would skip.
+      - name: Run pre-commit on all files
+        run: pre-commit run --all-files
+
+  tests:
+    name: Tests (pytest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Poetry
+        run: pipx install poetry==1.8.2
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: poetry
+
+      - name: Install dependencies (incl. dev group)
+        run: poetry install --no-interaction --no-root
+
+      # The suite spins up in-memory repositories (app/test/fixtures.py) —
+      # no MongoDB, Kafka or any other service required.
+      - name: Run pytest
+        working-directory: app
+        run: poetry run pytest -q
+
+  configs:
+    name: Observability configs (promtool + amtool)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate Prometheus config and alert rules
+        run: >
+          docker run --rm --entrypoint promtool
+          -v "${{ github.workspace }}/prometheus.yml:/etc/prometheus/prometheus.yml:ro"
+          -v "${{ github.workspace }}/docker_compose/prometheus-alerts.yml:/etc/prometheus/prometheus-alerts.yml:ro"
+          prom/prometheus:latest check config /etc/prometheus/prometheus.yml
+
+      - name: Validate Alertmanager config
+        run: >
+          docker run --rm --entrypoint amtool
+          -v "${{ github.workspace }}/docker_compose/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro"
+          prom/alertmanager:latest check-config /etc/alertmanager/alertmanager.yml
+
+  docker-build:
+    name: Docker image build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build app image (no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

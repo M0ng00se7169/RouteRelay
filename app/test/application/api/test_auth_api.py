@@ -10,10 +10,7 @@ import pytest
 
 from application.api.auth.handlers import router as auth_router
 from application.api.main import create_app
-from settings.security import (
-    get_current_user,
-    issue_token,
-)
+from settings.security import get_current_user
 
 
 @pytest.fixture

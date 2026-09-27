@@ -1,10 +1,12 @@
-# Alertmanager configuration (ADR-0007, Chunks 2-3).
+# Alertmanager configuration (ADR-0007, Chunks 2-3; Telegram transport per §4).
 #
 # Routing mirrors the runbook split: critical pages immediately (no batching),
-# warnings are grouped per subsystem. All receivers currently point at the
-# app's webhook sink (POST /ops/alerts -> structured JSON logs, Loki-visible):
-# the dev transport from ADR-0007 Chunk 3. Swapping in a paging transport
-# (Telegram relay etc.) later means changing ONLY the receiver URLs here.
+# warnings are grouped per subsystem. oncall-critical and team-warnings use DUAL
+# delivery: the built-in telegram_configs receiver (AM calls api.telegram.org
+# directly; token/chat_id come from /run/secrets/* files — AM config cannot
+# expand env vars) AND the app's webhook sink (POST /ops/alerts -> structured
+# JSON logs, Loki-visible). default-log stays webhook-only (dev catch-all, must
+# never page).
 #
 # Validate with:
 #   docker run --rm --entrypoint amtool -v <file>:/etc/alertmanager/alertmanager.yml:ro \
@@ -37,10 +39,22 @@ receivers:
       - url: 'http://main-app:8000/ops/alerts'
         send_resolved: true
   - name: oncall-critical
+    telegram_configs:
+      - bot_token_file: '/run/secrets/telegram_bot_token'
+        chat_id_file: '/run/secrets/telegram_chat_id'
+        api_url: 'https://api.telegram.org'
+        parse_mode: 'HTML'
+        send_resolved: true
     webhook_configs:
       - url: 'http://main-app:8000/ops/alerts'
         send_resolved: true
   - name: team-warnings
+    telegram_configs:
+      - bot_token_file: '/run/secrets/telegram_bot_token'
+        chat_id_file: '/run/secrets/telegram_chat_id'
+        api_url: 'https://api.telegram.org'
+        parse_mode: 'HTML'
+        send_resolved: true
     webhook_configs:
       - url: 'http://main-app:8000/ops/alerts'
         send_resolved: true

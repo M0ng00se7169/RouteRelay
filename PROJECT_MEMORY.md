@@ -5,7 +5,7 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-25** · Tests: **217 passed** (`cd app && poetry run pytest`, ~5s)
+> Last updated: **2026-09-25** · Tests: **217 passed** (`cd app && poetry run pytest`, ~5s) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest, promtool/amtool, docker build)
 
 ---
 
@@ -80,6 +80,40 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — CI pipeline added (GitHub Actions).** `.github/workflows/ci.yml`, 4 jobs:
+  lint = the repo's own pre-commit suite (`--all-files`, pyupgrade/ruff/add-trailing-comma/isort —
+  `ruff format` is deliberately NOT a gate, 83 files would be reformatted), tests = pytest
+  (self-contained, no services), configs = promtool + amtool validation of the observability
+  stack, docker build = Buildx image build check with GHA cache. Triggers: push to
+  `main`/`features`, PRs to `main`. Enabling it required a lint baseline: 2 unused imports
+  removed + isort normalized 5 JWT-import blocks (pre-commit suite is now idempotent on all
+  files). README gained the CI badge + a CI/CD section; README/architecture.md de-duplicated
+  first (Makefile table corrected to all 17 real targets — the old architecture.md copy said
+  "Postgres", and the tech table claimed SQLAlchemy/Loguru which this stack never had).
+  Not yet pushed; first Actions run happens on the next push.
+- **2026-09-25 — Telegram alerting live (ADR-0007 §4 decision).** `oncall-critical` and
+  `team-warnings` in `docker_compose/alertmanager/alertmanager.yml` gained `telegram_configs`
+  (AM's built-in receiver, v0.34.1) while KEEPING the webhook sink — dual delivery. Decided
+  against an app-relay endpoint: keeps paging alive when the app itself is down, zero app code,
+  AM owns retries. Secrets: token/chat id in **gitignored** files
+  (`docker_compose/alertmanager/secrets/telegram_bot_token|telegram_chat_id`), mounted as compose
+  file-secrets to `/run/secrets/`, read via `bot_token_file`/`chat_id_file` — AM config cannot
+  expand env vars; `.env.example` documents the names only. Verified live: amtool SUCCESS, routes
+  unchanged, temp critical+warning rules → Telegram messages received (AM
+  `alertmanager_notifications_total{integration="telegram"}` 1→2, zero errors; critical
+  immediate, warning after 5m group_wait) + sink CRITICAL/WARNING lines; test rules removed,
+  alerts file back to 6 rules, AM restart clean.
+- **2026-09-25 — ADR-0007 Chunk 4: runbook_url annotations complete (6/6 alerts).** The 5
+  previously bare alerts in `docker_compose/prometheus-alerts.yml` gained `runbook_url`:
+  `OutboxRelayFailing`/`OutboxBacklogGrowing` → existing `docs/runbooks/kafka-outage.md`; the
+  consumer pair → new `docs/runbooks/kafka-consumer.md` (documents that `kafka_consumer_up` stays 1
+  through reconnect backoff and drops only on non-cancelled task death; `KAFKA_CONSUMER_BACKOFF_*`
+  knobs; consumer restart = app restart, messages retained in the topic); `WSBroadcastFailures` →
+  new `docs/runbooks/ws-fanout.md` (best-effort fan-out, one dead socket no longer aborts the
+  broadcast, failures = client instability, no app restart). Validated: promtool 6 rules SUCCESS,
+  `kill -HUP prometheus`, all 6 `health: ok` with runbook_url via `/api/v1/rules`. Sink appends
+  runbook_url to log lines automatically. ADR-0007 §5/§9 + architecture.md + README synced.
+  No code changes; test count unchanged (217).
 - **2026-09-25 — ADR-0007 Chunks 1-3 implemented (webhook-sink transport, no external creds).**
   Alertmanager runs in the stack (`docker_compose/alertmanager.yaml` +
   `alertmanager/alertmanager.yml`, `ALERTMANAGER_PORT=9093` in both env files, make targets
