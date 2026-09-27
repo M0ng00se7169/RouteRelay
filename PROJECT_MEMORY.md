@@ -80,14 +80,19 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
-- **2026-09-25 — DECIDED (deferred): PEP 621 `[project]` migration waits for the first green CI
-  run.** `pyproject.toml` still uses legacy `[tool.poetry]` (`poetry check` warns about it).
-  Migration is NOT a pyproject-only change: Poetry 1.8.2 (pinned in Dockerfile + CI) cannot read
-  `[project]` — it requires bumping the pin to 2.1.3 (matches the local install, which also kills
-  the local-2.x lock gotcha above) AND replacing the Dockerfile's `poetry export` calls (2.x
-  needs `poetry-plugin-export` installed explicitly, or a different reqs strategy). Do it as its
-  own small PR after CI is proven green on 1.8.2 — never in the same PR as the first pipeline
-  run, so failures stay attributable.
+- **2026-09-25 — PEP 621 migration done (branch `refactor/pep621`, own PR).** `pyproject.toml`
+  now uses `[project]` + PEP 735 `[dependency-groups]` (dev) + `[tool.poetry] package-mode=false`
+  (application — replaces CI's `--no-root`); `[build-system]` dropped. **Poetry pin bumped
+  1.8.2 → 2.3.0** in Dockerfile (+ `poetry-plugin-export` — export is a plugin since 2.x) and CI.
+  Gotchas, all hit live: (1) PEP 735 groups need Poetry ≥2.2, and the 2.2 lock-hash bug makes
+  **2.3.0 the minimum safe pin** — 2.1.3 silently ignores `[dependency-groups]`; (2) `punq`
+  declares `Requires-Python <4.0`, so `requires-python` MUST carry the same ceiling
+  (`">=3.11,<4.0"`) — an open range fails resolution; (3) local Poetry 2.1.3 is now OLDER than
+  the 2.3.0 pin — regenerate locks with 2.3.0 (throwaway venv `/tmp/p230` pattern or upgrade
+  local Poetry), the old "use 1.8.2" rule above is OBSOLETE. Verified: `poetry check` clean
+  (deprecation warnings gone), lock has dev group, prod export 31 pkgs w/o ipython, dev export
+  64 pkgs, fresh-venv `poetry install --with=dev` + **217 passed** + ruff clean. Docker builder
+  stage not built locally (daemon down) — verified by the PR's docker-build job.
 - **2026-09-25 — Repo polish: MIT LICENSE + ipython out of the prod image.** Added `LICENSE`
   (MIT, © M0ng00se7169); moved `ipython` from runtime deps to the dev group (it was shipped into
   the prod image via the Dockerfile's `poetry export`) and filled the empty pyproject

@@ -53,7 +53,9 @@ jobs:
       - uses: actions/checkout@v5
 
       - name: Install Poetry
-        run: pipx install poetry==1.8.2
+        # 2.3.0 = supports PEP 621 [project] AND PEP 735 [dependency-groups]
+        # (groups landed in 2.2.0; the lock-hash bug in them was fixed in 2.3.0)
+        run: pipx install poetry==2.3.0
 
       - uses: actions/setup-python@v6
         with:
@@ -61,7 +63,9 @@ jobs:
           cache: poetry
 
       - name: Install dependencies (incl. dev group)
-        run: poetry install --no-interaction --no-root
+        # package-mode=false (PEP 621 pyproject): poetry install manages the
+        # env only, there is no project package to skip.
+        run: poetry install --no-interaction
 
       # The suite spins up in-memory repositories (app/test/fixtures.py) —
       # no MongoDB, Kafka or any other service required.

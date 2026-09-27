@@ -2,7 +2,7 @@ FROM python:3.12-slim-bookworm AS builder
 
 COPY poetry.lock pyproject.toml ./
 
-RUN python -m pip install poetry==1.8.2 && \
+RUN python -m pip install poetry==2.3.0 poetry-plugin-export && \
     poetry export -o requirements.prod.txt --without-hashes && \
     poetry export --with=dev -o requirements.dev.txt --without-hashes
 
