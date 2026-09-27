@@ -80,6 +80,43 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-25 — DECIDED (deferred): PEP 621 `[project]` migration waits for the first green CI
+  run.** `pyproject.toml` still uses legacy `[tool.poetry]` (`poetry check` warns about it).
+  Migration is NOT a pyproject-only change: Poetry 1.8.2 (pinned in Dockerfile + CI) cannot read
+  `[project]` — it requires bumping the pin to 2.1.3 (matches the local install, which also kills
+  the local-2.x lock gotcha above) AND replacing the Dockerfile's `poetry export` calls (2.x
+  needs `poetry-plugin-export` installed explicitly, or a different reqs strategy). Do it as its
+  own small PR after CI is proven green on 1.8.2 — never in the same PR as the first pipeline
+  run, so failures stay attributable.
+- **2026-09-25 — Repo polish: MIT LICENSE + ipython out of the prod image.** Added `LICENSE`
+  (MIT, © M0ng00se7169); moved `ipython` from runtime deps to the dev group (it was shipped into
+  the prod image via the Dockerfile's `poetry export`) and filled the empty pyproject
+  description. **Gotcha that almost shipped:** local Poetry is 2.1.3 — its lock file
+  (lock-version 2.1) is unreadable by the Poetry 1.8.2 pinned in the Dockerfile, and 2.x dropped
+  the built-in `export` the Dockerfile uses. Lock was regenerated with 1.8.2 in a throwaway venv
+  (`python -m venv` + pip install poetry==1.8.2 → `poetry lock --no-update`); verified prod
+  export has 0 ipython hits, dev export has 1, 217 tests pass. **Rule: never run bare
+  `poetry lock` with the local 2.x — regenerate with 1.8.2.**
+- **2026-09-25 — README portfolio section: "Engineering Highlights".** Top-of-README 4-step
+  CI/CD story table (push/PR → merge → deploy → rollback) linking the CI/CD run pages, workflow
+  files, GHCR packages, the deploy-and-rollback runbook and ADR-0006/0007; H1 title + CD badge
+  added next to the CI badge. The lower "CI/CD" section slimmed to "CI/CD (details)" (operational
+  reference only) — job tables live once, in Highlights.
+- **2026-09-25 — Deploy + rollback path documented.** `docs/runbooks/deploy-and-rollback.md`:
+  run the stack from CD's GHCR images and roll back by pinning
+  `APP_IMAGE=ghcr.io/m0ng00se7169/ddd_examples:<sha>` in `.env` (never git-revert to roll back —
+  that triggers a fresh CD build). New `deploy/compose/docker-compose.deploy.yml` REPLACES
+  `main-app` (compose `-f` override merge cannot remove keys — an `image:` override over
+  `app.yaml` would still hit its `build:` and repo bind-mount + `--reload`; verified via
+  `docker compose config`: no build/volumes in the rendered merge, APP_IMAGE resolves).
+  Blast-radius table: Mongo/Kafka/AM state survives an app swap; the app is stateless by design
+  (outbox). `.github/workflows/cd.yml`: on push to `main` → wait for
+  the CI run's `Tests (pytest)` check on the same SHA (`lewagon/wait-on-check-action`) → buildx
+  build + push to `ghcr.io/m0ng00se7169/ddd_examples` (tags: `latest` on the default branch +
+  full commit SHA via metadata-action; GHA layer cache). Auth is the built-in `GITHUB_TOKEN`
+  with `packages: write` — no PAT; package visibility is flipped per-package on GHCR after the
+  first push (independent of repo visibility). CI's `docker-build` job now skips on `main`
+  (`if: github.ref != 'refs/heads/main'`) so the image builds exactly once per SHA.
 - **2026-09-25 — CI pipeline added (GitHub Actions).** `.github/workflows/ci.yml`, 4 jobs:
   lint = the repo's own pre-commit suite (`--all-files`, pyupgrade/ruff/add-trailing-comma/isort —
   `ruff format` is deliberately NOT a gate, 83 files would be reformatted), tests = pytest

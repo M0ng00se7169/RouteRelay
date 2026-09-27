@@ -1,0 +1,41 @@
+# Runs main-app from the CD-published GHCR image instead of the dev
+# bind-mount build. NOT a standalone stack — merge it over the data-plane
+# files (procedure: docs/runbooks/deploy-and-rollback.md):
+#
+#   docker compose -f deploy/compose/docker-compose.deploy.yml \
+#                  -f docker_compose/storages.yaml \
+#                  -f docker_compose/kafka.yaml --env-file .env up -d
+#
+# Why this file exists (the override-merge gotcha): compose CANNOT remove
+# keys via the -f override merge. app.yaml defines main-app with `build:`
+# and a repo bind-mount; any file listed after it can only merge-add, so
+# adding `image:` there would still rebuild from source on every `up`
+# (rollback tag ignored) and the bind-mount would run repo code inside the
+# pinned image shell. A fresh service definition replaces main-app
+# wholesale instead.
+#
+# Rollback = pin the tag in .env and re-run the command above:
+#   APP_IMAGE=ghcr.io/m0ng00se7169/ddd_examples:<commit-sha>
+services:
+  main-app:
+    # Resolved by compose from the environment/.env at DEPLOY time — not by
+    # the container. Default: whatever CD last pushed to main.
+    image: ${APP_IMAGE:-ghcr.io/m0ng00se7169/ddd_examples:latest}
+    container_name: main-app
+    ports:
+      - "${API_PORT}:8000"
+    env_file:
+      # Relative to THIS file's directory (deploy/compose/), like the
+      # alertmanager mount comment says for docker_compose/.
+      - ../../.env
+    # No --reload: dev-only (watched the bind-mount we deliberately dropped).
+    command: "uvicorn --factory application.api.main:create_app --timeout-graceful-shutdown 2 --host 0.0.0.0 --port 8000 --ws=websockets"
+    networks:
+      - backend
+    depends_on:
+      kafka:
+        condition: service_healthy
+
+networks:
+  backend:
+    driver: bridge
