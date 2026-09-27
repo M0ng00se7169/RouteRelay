@@ -1,14 +1,6 @@
 import logging
 from dataclasses import dataclass
 
-from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
-from infrastructure.integrations.notifications.dtos import Notification
-from infrastructure.metrics import (
-    safe_inc,
-    telegram_notifications_failed_total,
-    telegram_notifications_sent_total,
-)
-
 from domain.events.messages import (
     ChatDeletedEvent,
     ListenerAddedEvent,
@@ -16,8 +8,14 @@ from domain.events.messages import (
     NewMessageReceivedEvent,
     NewMessageReceivedFromBrokerEvent,
 )
+from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
+from infrastructure.integrations.notifications.dtos import Notification
+from infrastructure.metrics import (
+    safe_inc,
+    telegram_notifications_failed_total,
+    telegram_notifications_sent_total,
+)
 from logic.events.base import EventHandler
-
 
 # NOTE: Kafka delivery is no longer performed here. The Transaction Outbox relay
 # (infrastructure.outbox.relay.OutboxRelay) is the sole writer to Kafka, reading
@@ -53,7 +51,7 @@ class ListenerAddedEventHandler(EventHandler):
                 # Delivery attempt metrics (ADR-0006, Chunk 6.1): when the
                 # client is None (unconfigured) nothing is counted.
                 safe_inc(telegram_notifications_sent_total)
-            except Exception as e:
+            except Exception as e:  # noqa: BLE001 — notify failure must not break the event pipeline
                 # Log failure without breaking the event pipeline
                 safe_inc(telegram_notifications_failed_total)
                 logger.warning("Failed to send Telegram notification: %s", e)

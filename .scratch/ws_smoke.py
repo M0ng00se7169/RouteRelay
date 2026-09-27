@@ -13,7 +13,6 @@ import uuid
 import httpx
 import websockets
 
-
 BASE = 'http://localhost:8000'
 RECV_TIMEOUT = 30
 

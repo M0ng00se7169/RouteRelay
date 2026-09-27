@@ -1,11 +1,12 @@
 from unittest.mock import AsyncMock
 
 import pytest
+from prometheus_client import REGISTRY
+
 from infrastructure.websockets.managers import (
     BaseConnectionManager,
     ConnectionManager,
 )
-from prometheus_client import REGISTRY
 
 
 class FakeWebSocket:

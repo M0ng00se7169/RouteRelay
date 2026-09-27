@@ -9,7 +9,6 @@ from fastapi.responses import (
     Response,
 )
 
-
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=['Ops'])
@@ -39,7 +38,7 @@ async def alert_sink(request: Request) -> Response:
     """
     try:
         payload = await request.json()
-    except Exception:
+    except Exception:  # noqa: BLE001 — any malformed body must degrade to a 400
         return JSONResponse(
             status_code=400,
             content={'detail': {'error': 'body must be Alertmanager webhook JSON'}},

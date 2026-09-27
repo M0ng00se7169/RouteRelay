@@ -4,11 +4,10 @@ import uuid
 
 from faker import Faker
 from locust import (
-    between,
-    FastHttpUser,
-    task,
+	FastHttpUser,
+	between,
+	task,
 )
-
 
 logger = logging.getLogger(__name__)
 

@@ -8,7 +8,6 @@ None once labels exist.
 """
 
 from dataclasses import dataclass
-from test.fixtures import init_dummy_container
 
 import pytest
 from prometheus_client import REGISTRY
@@ -21,6 +20,7 @@ from logic.commands.base import BaseCommand
 from logic.exceptions.mediator import CommandHandlersNotRegisteredException
 from logic.mediator.base import Mediator
 from logic.queries.messages import GetAllChatsListenersQuery
+from test.fixtures import init_dummy_container
 
 
 def _labeled(name: str, label: str, value: str) -> float:

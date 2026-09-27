@@ -1,6 +1,6 @@
+from collections.abc import Mapping
 from typing import (
     Any,
-    Mapping,
 )
 
 from domain.entities.messages import (

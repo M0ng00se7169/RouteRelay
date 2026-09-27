@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 
 from httpx import AsyncClient
+
 from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
 from infrastructure.integrations.notifications.dtos import Notification
 

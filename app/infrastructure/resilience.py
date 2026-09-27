@@ -16,12 +16,11 @@ tripping. The repository proxies below are explicit decorators rather than a
 generic ``__getattr__`` proxy so every guarded call site stays greppable.
 """
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import monotonic
 from typing import (
     Any,
-    Awaitable,
-    Callable,
 )
 
 from infrastructure.metrics import (

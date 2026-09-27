@@ -1,8 +1,8 @@
 import logging
 
 from infrastructure.logging_config import (
-    configure_json_logging,
-    JSONFormatter,
+	JSONFormatter,
+	configure_json_logging,
 )
 
 

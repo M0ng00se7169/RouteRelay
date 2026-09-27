@@ -24,11 +24,10 @@ from collections.abc import Callable
 from typing import Any
 
 from prometheus_client import (
-    Counter,
-    Gauge,
-    Histogram,
+	Counter,
+	Gauge,
+	Histogram,
 )
-
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +42,7 @@ def _metric_name(metric: Any) -> str:
 	"""Best-effort display name for log messages — never raises."""
 	try:
 		return str(metric._name)
-	except Exception:
+	except Exception:  # noqa: BLE001 — best-effort naming must never raise
 		return repr(metric)
 
 

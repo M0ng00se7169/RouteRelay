@@ -1,8 +1,11 @@
+from pydantic import BaseModel
+
 from infrastructure.repositories.filters.messages import (
     GetAllChatsFilters as GetAllChatsInfrastructureFilters,
+)
+from infrastructure.repositories.filters.messages import (
     GetMessagesFilters as GetMessagesInfraFilters,
 )
-from pydantic import BaseModel
 
 
 class GetMessagesFilters(BaseModel):

@@ -1,12 +1,11 @@
 import time
 
+import pytest
 from fastapi import (
     Depends,
     FastAPI,
 )
 from fastapi.testclient import TestClient
-
-import pytest
 
 from application.api.auth.handlers import router as auth_router
 from application.api.main import create_app

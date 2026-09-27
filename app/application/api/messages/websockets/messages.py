@@ -5,16 +5,14 @@ from fastapi import (
     Depends,
 )
 from fastapi.websockets import WebSocket
+from punq import Container
 from starlette.websockets import WebSocketDisconnect
 
 from infrastructure.websockets.managers import BaseConnectionManager
-from punq import Container
-
 from logic.exceptions.messages import ChatNotFoundException
 from logic.init import init_container
 from logic.mediator.base import Mediator
 from logic.queries.messages import GetChatDetailQuery
-
 
 router = APIRouter(tags=['chats'])
 

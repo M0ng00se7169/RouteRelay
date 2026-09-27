@@ -14,12 +14,11 @@ import pytest
 from prometheus_client import REGISTRY
 
 from application.api.lifespan import (
-    _drop_consumer_heartbeat_if_dead,
-    _kafka_consumer_loop,
-    start_kafka_consumer,
-    stop_kafka_consumer,
+	_drop_consumer_heartbeat_if_dead,
+	_kafka_consumer_loop,
+	start_kafka_consumer,
+	stop_kafka_consumer,
 )
-
 
 TOPIC = 'new-messages'
 
@@ -257,7 +256,6 @@ def _app_with(mapping):
 @pytest.mark.asyncio
 async def test_consumer_heartbeat_transitions_on_start_and_stop():
 	from infrastructure.message_brokers.base import BaseMessageBroker
-
 	from logic.mediator.base import Mediator
 	from settings.config import Config
 
@@ -285,7 +283,6 @@ async def test_consumer_loop_survives_crash_and_reconnects():
 	# O-1: a stream crash must NOT kill the loop. The task stays alive, counts
 	# reconnects, and keeps the heartbeat up; only stop_kafka_consumer drops it.
 	from infrastructure.message_brokers.base import BaseMessageBroker
-
 	from logic.mediator.base import Mediator
 	from settings.config import Config
 

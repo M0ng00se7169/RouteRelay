@@ -1,37 +1,36 @@
 import asyncio
 from contextlib import asynccontextmanager
 from unittest.mock import (
-    AsyncMock,
-    MagicMock,
+	AsyncMock,
+	MagicMock,
 )
 
+import pytest
 from fastapi import FastAPI
 
-import pytest
+from application.api.lifespan import (
+	close_message_broker,
+	init_message_broker,
+	start_relay,
+	stop_relay,
+)
+from domain.events.messages import (
+	ChatDeletedEvent,
+	NewChatCreatedEvent,
+	NewMessageReceivedEvent,
+	NewMessageReceivedFromBrokerEvent,
+)
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.message_brokers.kafka import KafkaMessageBroker
 from infrastructure.outbox.mapper import resolve_topic
 from infrastructure.outbox.mongo import MongoOutboxRepository
 from infrastructure.outbox.relay import OutboxRelay
 from infrastructure.outbox.session import MongoSessionProvider
-
-from application.api.lifespan import (
-    close_message_broker,
-    init_message_broker,
-    start_relay,
-    stop_relay,
-)
-from domain.events.messages import (
-    ChatDeletedEvent,
-    NewChatCreatedEvent,
-    NewMessageReceivedEvent,
-    NewMessageReceivedFromBrokerEvent,
-)
 from logic.events.messages import (
-    ChatDeletedEventHandler,
-    NewChatCreatedEventHandler,
-    NewMessageReceivedEventHandler,
-    NewMessageReceivedFromBrokerEventHandler,
+	ChatDeletedEventHandler,
+	NewChatCreatedEventHandler,
+	NewMessageReceivedEventHandler,
+	NewMessageReceivedFromBrokerEventHandler,
 )
 from logic.init import init_container
 
@@ -159,8 +158,8 @@ async def test_kafka_start_creates_producer_and_consumer():
 	# Patch the aiokafka classes so start() does not open a real network connection.
 	import infrastructure.message_brokers.kafka as kafka_mod
 	orig_p, orig_c = kafka_mod.AIOKafkaProducer, kafka_mod.AIOKafkaConsumer
-	kafka_mod.AIOKafkaProducer = _capture_producer  # noqa: N801
-	kafka_mod.AIOKafkaConsumer = lambda **k: consumer  # noqa: N801
+	kafka_mod.AIOKafkaProducer = _capture_producer
+	kafka_mod.AIOKafkaConsumer = lambda **k: consumer
 	try:
 		await broker.start()
 	finally:

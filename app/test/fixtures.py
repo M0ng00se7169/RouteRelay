@@ -1,35 +1,35 @@
 import asyncio
 
+from punq import (
+	Container,
+	Scope,
+)
+
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.relay import OutboxRelay
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.messages.base import (
-    BaseChatsRepository,
-    BaseMessagesRepository,
+	BaseChatsRepository,
+	BaseMessagesRepository,
 )
 from infrastructure.repositories.messages.memory import (
-    MemoryChatRepository,
-    MemoryMessagesRepository,
+	MemoryChatRepository,
+	MemoryMessagesRepository,
 )
 from infrastructure.resilience import (
-    CircuitBreaker,
-    CircuitBreakerChatsRepository,
-    CircuitBreakerMessagesRepository,
+	CircuitBreaker,
+	CircuitBreakerChatsRepository,
+	CircuitBreakerMessagesRepository,
 )
-from punq import (
-    Container,
-    Scope,
-)
-
 from logic.init import (
-    build_mediator,
-    init_container,
+	build_mediator,
+	init_container,
 )
 from logic.mediator.base import (
-    EventMediator,
-    Mediator,
+	EventMediator,
+	Mediator,
 )
 from settings.config import Config
 

@@ -4,7 +4,6 @@ from fastapi import (
     HTTPException,
     status,
 )
-
 from punq import Container
 
 from application.api.messages.filters import (
@@ -41,7 +40,6 @@ from logic.queries.messages import (
     GetMessagesQuery,
 )
 from settings.security import get_current_user
-
 
 router = APIRouter(tags=['Chat'])
 

@@ -4,6 +4,16 @@ from unittest.mock import (
 )
 
 import pytest
+
+from domain.entities.messages import (
+    Chat,
+    ChatListener,
+    Message,
+)
+from domain.values.messages import (
+    Text,
+    Title,
+)
 from infrastructure.repositories.filters.messages import (
     GetAllChatsFilters,
     GetMessagesFilters,
@@ -16,16 +26,6 @@ from infrastructure.repositories.messages.memory import MemoryChatRepository
 from infrastructure.repositories.messages.mongo import (
     MongoDBChatsRepository,
     MongoDBMessagesRepository,
-)
-
-from domain.entities.messages import (
-    Chat,
-    ChatListener,
-    Message,
-)
-from domain.values.messages import (
-    Text,
-    Title,
 )
 
 

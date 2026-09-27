@@ -4,7 +4,6 @@ from abc import (
 )
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Optional
 
 from domain.events.base import BaseEvent
 
@@ -18,7 +17,7 @@ class OutboxRow:
 	payload: bytes
 	occurred_at: datetime
 	sent: bool = False
-	sent_at: Optional[datetime] = None
+	sent_at: datetime | None = None
 
 
 @dataclass

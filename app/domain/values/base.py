@@ -9,7 +9,6 @@ from typing import (
     TypeVar,
 )
 
-
 VT = TypeVar('VT', bound=Any)
 
 

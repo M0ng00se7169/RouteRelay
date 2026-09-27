@@ -1,6 +1,12 @@
 from unittest.mock import AsyncMock
 
 import pytest
+
+from domain.entities.messages import (
+    Chat,
+    ChatListener,
+)
+from domain.values.messages import Title
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.filters.messages import GetMessagesFilters
@@ -8,12 +14,6 @@ from infrastructure.repositories.messages.memory import (
     MemoryChatRepository,
     MemoryMessagesRepository,
 )
-
-from domain.entities.messages import (
-    Chat,
-    ChatListener,
-)
-from domain.values.messages import Title
 from logic.commands.messages import (
     AddTelegramListenerCommand,
     AddTelegramListenerCommandHandler,
@@ -57,7 +57,6 @@ class NoopSessionProvider(SessionProvider):
 
     async def __call__(self):
         self.calls += 1
-        return None
 
 
 def _chat_repo_with(title='room'):

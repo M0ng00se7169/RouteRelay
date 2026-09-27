@@ -1,1 +1,1 @@
-from test.logic.conftest import *  # noqa
+from test.logic.conftest import *

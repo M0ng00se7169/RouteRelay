@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from test.fixtures import init_dummy_container
 
 import pytest
 
@@ -11,6 +10,7 @@ from logic.mediator.base import (
     BaseCommand,
     Mediator,
 )
+from test.fixtures import init_dummy_container
 
 
 @dataclass(frozen=True)

@@ -5,7 +5,7 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-25** · Tests: **217 passed** (`cd app && poetry run pytest`, ~5s) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest, promtool/amtool, docker build)
+> Last updated: **2026-09-27** · Tests: **217 passed, 0 warnings** (`cd app && poetry run pytest`, ~4s) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest, promtool/amtool, docker build)
 
 ---
 
@@ -42,7 +42,7 @@ HTTP/WS  application/api/{auth,messages}/handlers.py     (FastAPI routers)
 Key wiring facts:
 - **DI single source of truth:** `app/logic/init.py` (`_init_container`). Full table: `docs/di-reference.md`.
 - **Mediator is built last** by `build_mediator(container, config)`; command handlers are registered
-  via *factories* (punq 0.7.0 introspection quirk — do not "simplify" back to class registrations).
+  via *factories* (punq introspection quirk — do not "simplify" back to class registrations).
 - **Tests** rebuild the mediator via `init_dummy_container` (`app/test/fixtures.py`), which overrides
   repos with in-memory versions and pops punq's cached singletons. Reuse this instead of ad-hoc mocking.
 - **Transactions** via `_maybe_transaction` (Mongo session; test session provider returns `None`).
@@ -80,6 +80,36 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-27 — All dependencies bumped to latest.** pyproject constraints + lock regenerated
+  (throwaway Poetry 2.3.0 venv; the 1.8.2 rule is obsolete, 2.1.3 can't do PEP 735 locks).
+  Notables: fastapi 0.115→0.141 (starlette 0.40→**1.7**), aiokafka 0.10→0.14, punq 0.7→0.9,
+  pytest 8→9, pytest-asyncio 0.24→1.4 (explicit `@pytest.mark.asyncio` markers still fine —
+  no `asyncio_mode` config exists), ruff 0.15.22→**0.16.9** (default rules 59→413 — adopted;
+  see the lint bullet below), pre-commit ruff hook rev bumped to v0.16.9 to match. Verified:
+  217 passed, `ruff check .` clean, pre-commit `--all-files` idempotent, `poetry check` clean.
+  Starlette 1.7's testclient deprecation warning surfaced by this bump — resolved separately,
+  see the httpx2 bullet below.
+- **2026-09-27 — httpx2 added to dev deps (starlette TestClient deprecation resolved).**
+  Starlette ≥1.2's TestClient prefers `httpx2` (Pydantic-maintained httpx rename, same API)
+  and warns on the plain-`httpx` fallback; the fallback is removed in starlette 2.0. Fix:
+  `httpx2>=2.13.1,<3` in the dev group + `test/application/api/test_messages.py` annotation
+  re-typed to `httpx2.Response` (TestClient now returns httpx2 objects). Runtime httpx
+  deliberately STAYS: the Telegram notification client, lifespan.py and fastapi[httpx] still
+  need it; the two packages coexist by design (starlette's own `full` extra ships both, and
+  httpcore 1.0.9 + httpcore2 2.13.1 share h11 0.16 — no resolver conflict). Verified: 217
+  passed with zero warnings, ruff clean, pre-commit idempotent, `poetry check` clean.
+  Future trigger: when fastapi flips its extras to httpx2 (its own test suite already uses
+  it), migrate runtime httpx → httpx2 and drop the old package.
+- **2026-09-27 — Lint stack: ruff owns import sorting; isort hook removed.** ruff 0.16's default
+  rule set adopted (no rollback to `E4/E7/E9/F`). Config added under `[tool.ruff.lint]`:
+  `flake8-bugbear.extend-immutable-calls = ["fastapi.Depends"]` (B008), `isort.known-first-party`
+  = the flat aliases, `per-file-ignores` (B008/DTZ in 3 test files). **Gotcha:** per-file-ignores
+  globs resolve from the pyproject.toml dir (repo root) — they need the `app/` prefix.
+  `[tool.isort]` deleted from pyproject + isort hook dropped from pre-commit (ruff's I001 can't
+  reproduce its custom FASTAPI section — the two would fight forever). 96 auto-fixes applied
+  (import order, UP035/045/017, RUF100); manual: 4 deliberate `BLE001` noqa (best-effort
+  boundaries), relay lambda binds `row=row` (B023), `__eq__(self, value, /)` (PYI063), plain
+  `import orjson` (PLC0414).
 - **2026-09-25 — PEP 621 migration done (branch `refactor/pep621`, own PR).** `pyproject.toml`
   now uses `[project]` + PEP 735 `[dependency-groups]` (dev) + `[tool.poetry] package-mode=false`
   (application — replaces CI's `--no-root`); `[build-system]` dropped. **Poetry pin bumped

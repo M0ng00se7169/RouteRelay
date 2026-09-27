@@ -1,15 +1,13 @@
+from collections.abc import AsyncIterator
 from dataclasses import (
-    dataclass,
-    field,
-)
-from typing import (
-    AsyncIterator,
-    Optional,
+	dataclass,
+	field,
 )
 
-import orjson as orjson
+import orjson
 from aiokafka import AIOKafkaConsumer
 from aiokafka.producer import AIOKafkaProducer
+
 from infrastructure.message_brokers.base import BaseMessageBroker
 
 
@@ -28,8 +26,8 @@ class KafkaMessageBroker(BaseMessageBroker):
 	# single-broker dev cluster the ISR is just the leader, so behavior is
 	# unchanged there; this hardens the guarantee for any cluster with RF>1.
 	acks: str = 'all'
-	producer: Optional[AIOKafkaProducer] = field(default=None, init=False)
-	consumer: Optional[AIOKafkaConsumer] = field(default=None, init=False)
+	producer: AIOKafkaProducer | None = field(default=None, init=False)
+	consumer: AIOKafkaConsumer | None = field(default=None, init=False)
 
 	async def start(self):
 		self.producer = AIOKafkaProducer(

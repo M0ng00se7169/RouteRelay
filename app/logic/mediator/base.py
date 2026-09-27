@@ -5,19 +5,18 @@ from dataclasses import (
     field,
 )
 
+from domain.events.base import BaseEvent
 from infrastructure.metrics import (
     mediator_commands_handled_total,
     mediator_events_published_total,
     mediator_queries_handled_total,
     safe_inc,
 )
-
-from domain.events.base import BaseEvent
 from logic.commands.base import (
-    BaseCommand,
-    CommandHandler,
     CR,
     CT,
+    BaseCommand,
+    CommandHandler,
 )
 from logic.events.base import (
     ER,
@@ -29,10 +28,10 @@ from logic.mediator.command import CommandMediator
 from logic.mediator.event import EventMediator
 from logic.mediator.query import QueryMediator
 from logic.queries.base import (
-    BaseQuery,
-    BaseQueryHandler,
     QR,
     QT,
+    BaseQuery,
+    BaseQueryHandler,
 )
 
 

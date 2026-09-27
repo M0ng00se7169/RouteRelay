@@ -1,18 +1,17 @@
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import (
-    datetime,
-    timezone,
+	UTC,
+	datetime,
 )
-from typing import Callable
 from uuid import uuid4
 
+from domain.events.base import BaseEvent
 from infrastructure.message_brokers.converters import convert_event_to_broker_message
 from infrastructure.outbox.base import (
-    BaseOutboxRepository,
-    OutboxRow,
+	BaseOutboxRepository,
+	OutboxRow,
 )
-
-from domain.events.base import BaseEvent
 
 
 @dataclass
@@ -50,7 +49,7 @@ class MongoOutboxRepository(BaseOutboxRepository):
 	async def mark_as_sent(self, ids: list[str]) -> None:
 		await self.collection.update_many(
 			{'_id': {'$in': ids}},
-			{'$set': {'sent': True, 'sent_at': datetime.now(timezone.utc)}},
+			{'$set': {'sent': True, 'sent_at': datetime.now(UTC)}},
 		)
 
 	@staticmethod
