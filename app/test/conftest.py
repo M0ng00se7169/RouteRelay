@@ -1,10 +1,9 @@
-from test.fixtures import init_dummy_container
-
-from infrastructure.repositories.messages.base import BaseChatsRepository
 from punq import Container
 from pytest import fixture
 
+from infrastructure.repositories.messages.base import BaseChatsRepository
 from logic.mediator.base import Mediator
+from test.fixtures import init_dummy_container
 
 
 @fixture(scope='function')

@@ -1,12 +1,10 @@
-from test.fixtures import init_dummy_container
-
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-import pytest
-
 from application.api.main import create_app
 from logic.init import init_container
+from test.fixtures import init_dummy_container
 
 
 @pytest.fixture

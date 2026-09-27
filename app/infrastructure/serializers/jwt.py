@@ -7,7 +7,6 @@ import json
 import time
 from typing import (
     Any,
-    Optional,
 )
 
 from settings.config import Config
@@ -53,7 +52,7 @@ def encode_token(payload: dict) -> str:
     return f"{signing_input}.{signature_str}"
 
 
-def create_token(subject: str, claims: Optional[dict] = None) -> str:
+def create_token(subject: str, claims: dict | None = None) -> str:
     """Create a signed JWT token.
 
     Args:

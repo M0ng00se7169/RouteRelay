@@ -1,21 +1,20 @@
+from collections.abc import Callable
 from dataclasses import (
-    dataclass,
-    field,
+	dataclass,
+	field,
 )
 from datetime import (
-    datetime,
-    timezone,
+	UTC,
+	datetime,
 )
-from typing import Callable
 from uuid import uuid4
 
+from domain.events.base import BaseEvent
 from infrastructure.message_brokers.converters import convert_event_to_broker_message
 from infrastructure.outbox.base import (
-    BaseOutboxRepository,
-    OutboxRow,
+	BaseOutboxRepository,
+	OutboxRow,
 )
-
-from domain.events.base import BaseEvent
 
 
 @dataclass
@@ -43,7 +42,7 @@ class MemoryOutboxRepository(BaseOutboxRepository):
 		return sum(1 for row in self._outbox if not row.sent)
 
 	async def mark_as_sent(self, ids: list[str]) -> None:
-		sent_at = datetime.now(timezone.utc)
+		sent_at = datetime.now(UTC)
 		for row in self._outbox:
 			if row._id in ids:
 				row.sent = True

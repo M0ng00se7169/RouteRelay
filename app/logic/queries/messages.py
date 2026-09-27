@@ -1,6 +1,11 @@
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
+from domain.entities.messages import (
+    Chat,
+    ChatListener,
+    Message,
+)
 from infrastructure.metrics import (
     db_operation_errors_total,
     safe_inc,
@@ -12,12 +17,6 @@ from infrastructure.repositories.filters.messages import (
 from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
     BaseMessagesRepository,
-)
-
-from domain.entities.messages import (
-    Chat,
-    ChatListener,
-    Message,
 )
 from logic.exceptions.messages import ChatNotFoundException
 from logic.queries.base import (

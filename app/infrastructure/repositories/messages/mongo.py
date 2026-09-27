@@ -1,7 +1,15 @@
 from abc import ABC
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
+from motor.core import AgnosticClient
+
+from application.api.messages.filters import GetMessagesFilters
+from domain.entities.messages import (
+    Chat,
+    ChatListener,
+    Message,
+)
 from infrastructure.repositories.filters.messages import GetAllChatsFilters
 from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
@@ -13,14 +21,6 @@ from infrastructure.repositories.messages.converters import (
     convert_chat_listener_document_to_entity,
     convert_message_document_to_entity,
     convert_message_entity_to_document,
-)
-from motor.core import AgnosticClient
-
-from application.api.messages.filters import GetMessagesFilters
-from domain.entities.messages import (
-    Chat,
-    ChatListener,
-    Message,
 )
 
 

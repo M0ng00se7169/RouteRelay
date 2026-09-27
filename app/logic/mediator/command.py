@@ -10,10 +10,10 @@ from dataclasses import (
 )
 
 from logic.commands.base import (
-    BaseCommand,
-    CommandHandler,
     CR,
     CT,
+    BaseCommand,
+    CommandHandler,
 )
 
 

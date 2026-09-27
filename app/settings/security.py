@@ -19,9 +19,7 @@ from infrastructure.serializers.jwt import (
     create_token,
     verify_token,
 )
-
 from settings.config import Config
-
 
 # Where clients obtain tokens (the POST /auth/token route).
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl='/auth/token')

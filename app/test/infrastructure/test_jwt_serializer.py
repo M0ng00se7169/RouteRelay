@@ -3,12 +3,12 @@
 import time
 
 import pytest
+
 from infrastructure.serializers.jwt import (
     create_token,
     encode_token,
     verify_token,
 )
-
 
 pytest.importorskip("infrastructure.serializers.jwt", reason="jwt.py must exist")
 

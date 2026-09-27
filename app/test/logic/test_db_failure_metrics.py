@@ -10,16 +10,16 @@ labels are dynamic (``operation.{ExceptionClassName}``), so assertions use
 from dataclasses import dataclass
 
 import pytest
+from prometheus_client import REGISTRY
+
+from domain.entities.messages import Chat
+from domain.values.messages import Title
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.messages.memory import (
     MemoryChatRepository,
     MemoryMessagesRepository,
 )
-from prometheus_client import REGISTRY
-
-from domain.entities.messages import Chat
-from domain.values.messages import Title
 from logic.commands.messages import (
     CreateChatCommand,
     CreateChatCommandHandler,

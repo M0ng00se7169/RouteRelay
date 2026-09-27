@@ -1,23 +1,8 @@
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
 from typing import (
-    AsyncIterator,
-    Awaitable,
-    Callable,
-    Optional,
-    Sequence,
     TypeVar,
-)
-
-from infrastructure.metrics import (
-    db_operation_errors_total,
-    safe_inc,
-)
-from infrastructure.outbox.base import BaseOutboxRepository
-from infrastructure.outbox.session import SessionProvider
-from infrastructure.repositories.messages.base import (
-    BaseChatsRepository,
-    BaseMessagesRepository,
 )
 
 from domain.entities.messages import (
@@ -29,12 +14,21 @@ from domain.values.messages import (
     Text,
     Title,
 )
+from infrastructure.metrics import (
+    db_operation_errors_total,
+    safe_inc,
+)
+from infrastructure.outbox.base import BaseOutboxRepository
+from infrastructure.outbox.session import SessionProvider
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
 from logic.exceptions.messages import (
     ChatNotFoundException,
     ChatWithThatTitleAlreadyExistsException,
 )
 from logic.mediator.base import EventMediator
-
 
 _T = TypeVar('_T')
 
@@ -63,7 +57,7 @@ async def _count_db_errors(operation: str, collection: str, call: Callable[[], A
 @asynccontextmanager
 async def _maybe_transaction(
     session_provider: SessionProvider,
-) -> AsyncIterator[Optional[object]]:
+) -> AsyncIterator[object | None]:
     session = await session_provider()
     if session is None:
         yield None

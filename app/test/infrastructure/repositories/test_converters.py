@@ -1,13 +1,5 @@
 from datetime import datetime
 
-from infrastructure.repositories.messages.converters import (
-    convert_chat_document_to_entity,
-    convert_chat_entity_to_document,
-    convert_chat_listener_document_to_entity,
-    convert_message_document_to_entity,
-    convert_message_entity_to_document,
-)
-
 from domain.entities.messages import (
     Chat,
     Message,
@@ -15,6 +7,13 @@ from domain.entities.messages import (
 from domain.values.messages import (
     Text,
     Title,
+)
+from infrastructure.repositories.messages.converters import (
+    convert_chat_document_to_entity,
+    convert_chat_entity_to_document,
+    convert_chat_listener_document_to_entity,
+    convert_message_document_to_entity,
+    convert_message_entity_to_document,
 )
 
 

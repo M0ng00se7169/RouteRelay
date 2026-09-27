@@ -6,15 +6,13 @@ reset it (finally block) — otherwise later tests would keep failing fast even
 though their in-memory repos are perfectly healthy.
 """
 
-from test.fixtures import init_dummy_container
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from infrastructure.resilience import CircuitBreaker
-
 from application.api.main import create_app
+from infrastructure.resilience import CircuitBreaker
 from logic.init import init_container
+from test.fixtures import init_dummy_container
 
 
 def _wrapped_client() -> tuple[TestClient, CircuitBreaker]:

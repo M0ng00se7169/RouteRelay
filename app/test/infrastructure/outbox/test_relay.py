@@ -1,17 +1,17 @@
 from datetime import (
-    datetime,
-    timezone,
+	UTC,
+	datetime,
 )
 from uuid import uuid4
 
 import pytest
+from prometheus_client import REGISTRY
+
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import OutboxRow
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.relay import OutboxRelay
 from infrastructure.resilience import CircuitBreaker
-from prometheus_client import REGISTRY
-
 
 METRIC_NAMES = (
 	'outbox_published_total',
@@ -52,7 +52,7 @@ def _make_row(topic: str = 'chat-events', sent: bool = False) -> OutboxRow:
 		topic=topic,
 		key=str(uuid4()).encode(),
 		payload=b'{"event": "x"}',
-		occurred_at=datetime.now(timezone.utc),
+		occurred_at=datetime.now(UTC),
 		sent=sent,
 	)
 

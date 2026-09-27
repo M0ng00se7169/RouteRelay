@@ -5,24 +5,22 @@ from time import perf_counter
 
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.metrics import (
-    circuit_breaker_rejected_total,
-    kafka_messages_sent_total,
-    outbox_pending,
-    outbox_publish_duration_seconds,
-    outbox_publish_errors_total,
-    outbox_published_total,
-    safe_inc,
-    safe_observe,
-    safe_set,
+	circuit_breaker_rejected_total,
+	kafka_messages_sent_total,
+	outbox_pending,
+	outbox_publish_duration_seconds,
+	outbox_publish_errors_total,
+	outbox_published_total,
+	safe_inc,
+	safe_observe,
+	safe_set,
 )
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.resilience import (
-    CircuitBreaker,
-    CircuitOpenError,
+	CircuitBreaker,
+	CircuitOpenError,
 )
-
 from settings.config import Config
-
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +69,7 @@ class OutboxRelay:
 			try:
 				if self.circuit_breaker is not None:
 					await self.circuit_breaker.call(
-						lambda: self.message_broker.send_message(
+						lambda row=row: self.message_broker.send_message(
 							key=row.key,
 							topic=row.topic,
 							value=row.payload,

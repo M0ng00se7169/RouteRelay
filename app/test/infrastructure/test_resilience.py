@@ -10,13 +10,14 @@ collide between tests.
 from time import monotonic
 
 import pytest
+from prometheus_client import REGISTRY
+
 from infrastructure.resilience import (
     CircuitBreaker,
     CircuitBreakerChatsRepository,
     CircuitBreakerMessagesRepository,
     CircuitOpenError,
 )
-from prometheus_client import REGISTRY
 
 
 class FlakyDependency:

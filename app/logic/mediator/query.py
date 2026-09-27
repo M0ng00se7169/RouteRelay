@@ -8,10 +8,10 @@ from dataclasses import (
 )
 
 from logic.queries.base import (
-    BaseQuery,
-    BaseQueryHandler,
     QR,
     QT,
+    BaseQuery,
+    BaseQueryHandler,
 )
 
 

@@ -2,32 +2,31 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import (
-    FastAPI,
-    Request,
-    status,
+	FastAPI,
+	Request,
+	status,
 )
 from fastapi.responses import JSONResponse
-
-from infrastructure.logging_config import configure_json_logging
-from infrastructure.metrics import (
-    application_info,
-    safe_set,
-)
-from infrastructure.resilience import CircuitOpenError
 from prometheus_fastapi_instrumentator import PrometheusFastApiInstrumentator
 
 from application.api.auth.handlers import router as auth_router
 from application.api.lifespan import (
-    close_message_broker,
-    init_message_broker,
-    start_kafka_consumer,
-    start_relay,
-    stop_kafka_consumer,
-    stop_relay,
+	close_message_broker,
+	init_message_broker,
+	start_kafka_consumer,
+	start_relay,
+	stop_kafka_consumer,
+	stop_relay,
 )
 from application.api.messages.handlers import router as message_router
 from application.api.messages.websockets.messages import router as message_ws_router
 from application.api.ops.handlers import router as ops_router
+from infrastructure.logging_config import configure_json_logging
+from infrastructure.metrics import (
+	application_info,
+	safe_set,
+)
+from infrastructure.resilience import CircuitOpenError
 from settings.config import Config
 
 

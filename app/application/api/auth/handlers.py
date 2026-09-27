@@ -12,7 +12,6 @@ from settings.security import (
     issue_token,
 )
 
-
 router = APIRouter(tags=['Auth'])
 
 

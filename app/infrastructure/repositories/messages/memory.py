@@ -3,17 +3,16 @@ from dataclasses import (
     field,
 )
 
-from infrastructure.repositories.filters.messages import GetAllChatsFilters
-from infrastructure.repositories.messages.base import (
-    BaseChatsRepository,
-    BaseMessagesRepository,
-)
-
 from application.api.messages.filters import GetMessagesFilters
 from domain.entities.messages import (
     Chat,
     ChatListener,
     Message,
+)
+from infrastructure.repositories.filters.messages import GetAllChatsFilters
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
 )
 
 

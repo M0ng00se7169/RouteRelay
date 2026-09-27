@@ -2,8 +2,10 @@ import asyncio
 import logging
 
 from fastapi import FastAPI
-
 from httpx import AsyncClient
+from punq import Scope
+
+from domain.events.messages import NewMessageReceivedFromBrokerEvent
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.metrics import (
     kafka_consumer_errors_total,
@@ -16,13 +18,9 @@ from infrastructure.metrics import (
     safe_set,
 )
 from infrastructure.outbox.relay import OutboxRelay
-from punq import Scope
-
-from domain.events.messages import NewMessageReceivedFromBrokerEvent
 from logic.init import init_container
 from logic.mediator.base import Mediator
 from settings.config import Config
-
 
 logger = logging.getLogger(__name__)
 
@@ -56,7 +54,9 @@ async def init_message_broker(app: FastAPI | None = None):
     container.register(AsyncClient, factory=init_http_client_factory, scope=Scope.singleton)
 
     # Register the Telegram Notification Client as a singleton
-    from infrastructure.integrations.notifications.clients.telegram import TelegramNotificationClient
+    from infrastructure.integrations.notifications.clients.telegram import (
+        TelegramNotificationClient,
+    )
     container.register(TelegramNotificationClient, scope=Scope.singleton)
 
 

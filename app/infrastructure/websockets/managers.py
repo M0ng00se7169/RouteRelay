@@ -92,7 +92,7 @@ class ConnectionManager(BaseConnectionManager):
             for websocket in self.connections_map.get(key, []):
                 try:
                     await websocket.send_bytes(bytes_)
-                except Exception:
+                except Exception:  # noqa: BLE001 — best-effort fan-out, one dead socket must not abort
                     failures += 1
                     safe_inc(ws_broadcast_failures_total)
             safe_inc(ws_messages_broadcast_total)

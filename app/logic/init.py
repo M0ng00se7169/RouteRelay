@@ -1,6 +1,18 @@
 from functools import lru_cache
 
 from httpx import AsyncClient
+from motor.motor_asyncio import AsyncIOMotorClient
+from punq import (
+    Container,
+    Scope,
+)
+
+from domain.events.messages import (
+    ChatDeletedEvent,
+    ListenerAddedEvent,
+    NewChatCreatedEvent,
+    NewMessageReceivedEvent,
+)
 from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
 from infrastructure.integrations.notifications.clients.telegram import TelegramNotificationClient
 from infrastructure.message_brokers.base import BaseMessageBroker
@@ -9,8 +21,8 @@ from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.mapper import resolve_topic
 from infrastructure.outbox.mongo import MongoOutboxRepository
 from infrastructure.outbox.relay import (
-    build_relay,
     OutboxRelay,
+    build_relay,
 )
 from infrastructure.outbox.session import (
     MongoSessionProvider,
@@ -32,18 +44,6 @@ from infrastructure.resilience import (
 from infrastructure.websockets.managers import (
     BaseConnectionManager,
     ConnectionManager,
-)
-from motor.motor_asyncio import AsyncIOMotorClient
-from punq import (
-    Container,
-    Scope,
-)
-
-from domain.events.messages import (
-    ChatDeletedEvent,
-    ListenerAddedEvent,
-    NewChatCreatedEvent,
-    NewMessageReceivedEvent,
 )
 from logic.commands.messages import (
     AddTelegramListenerCommand,
