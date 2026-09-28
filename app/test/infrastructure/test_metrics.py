@@ -6,6 +6,7 @@ across tests, so capture baselines and assert on deltas — never unregister.
 
 from unittest.mock import MagicMock
 
+import pytest
 from prometheus_client import REGISTRY
 
 from infrastructure.metrics import (
@@ -62,7 +63,9 @@ class TestSafeHelpersNeverRaise:
 		def raise_every_time() -> None:
 			raise ValueError('nope')
 
-		assert _safe_observe('test metric', raise_every_time) is None
+		# Deliberate contract check: the helper returns None AND swallows the
+		# update's exception (no ValueError escapes this test).
+		assert _safe_observe('test metric', raise_every_time) is None  # type: ignore[func-returns-value]
 
 
 class TestHappyPath:
@@ -108,7 +111,7 @@ class TestHappyPath:
 class TestDescriptionLogging:
 	"""Failures are logged at WARNING with context, not silently dropped."""
 
-	def test_failure_is_logged_not_raised(self, caplog) -> None:
+	def test_failure_is_logged_not_raised(self, caplog: pytest.LogCaptureFixture) -> None:
 		import logging
 
 		def boom() -> None:

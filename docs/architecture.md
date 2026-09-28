@@ -192,11 +192,11 @@ Telegram failures) — see the alert-worthiness column.
 
 ```bash
 # From app/ directory
-cd app && poetry run pytest
+cd app && uv run pytest
 
 # Lint/format check
-poetry run ruff check .
-poetry run pre-commit run --all-files
+uv run ruff check .
+uv run pre-commit run --all-files
 ```
 
 ---

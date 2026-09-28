@@ -4,7 +4,11 @@ from datetime import (
 	UTC,
 	datetime,
 )
+from typing import Any
 from uuid import uuid4
+
+from motor.core import AgnosticCollection
+from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from domain.events.base import BaseEvent
 from infrastructure.message_brokers.converters import convert_event_to_broker_message
@@ -13,13 +17,16 @@ from infrastructure.outbox.base import (
 	OutboxRow,
 )
 
+# Alias keeps the repo signatures readable; sessions only pass through to motor.
+ClientSession = AsyncIOMotorClientSession
+
 
 @dataclass
 class MongoOutboxRepository(BaseOutboxRepository):
-	collection: object
+	collection: AgnosticCollection[dict[str, Any]]
 	_topic_resolver: Callable[[BaseEvent], str]
 
-	async def save_events(self, events: list[BaseEvent], session=None) -> None:
+	async def save_events(self, events: list[BaseEvent], session: ClientSession | None = None) -> None:
 		if not events:
 			return
 		docs = [
@@ -53,7 +60,7 @@ class MongoOutboxRepository(BaseOutboxRepository):
 		)
 
 	@staticmethod
-	def _to_row(doc: dict) -> OutboxRow:
+	def _to_row(doc: dict[str, Any]) -> OutboxRow:
 		return OutboxRow(
 			_id=str(doc['_id']),
 			event_id=str(doc['event_id']),

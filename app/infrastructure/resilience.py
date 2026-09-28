@@ -16,19 +16,36 @@ tripping. The repository proxies below are explicit decorators rather than a
 generic ``__getattr__`` proxy so every guarded call site stays greppable.
 """
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
 from time import monotonic
 from typing import (
-    Any,
+    TypeVar,
 )
 
+from domain.entities.messages import (
+    Chat,
+    ChatListener,
+    Message,
+)
 from infrastructure.metrics import (
     circuit_breaker_rejected_total,
     circuit_breaker_state,
     safe_inc,
     safe_set,
 )
+from infrastructure.repositories.filters.messages import (
+    GetAllChatsFilters,
+    GetMessagesFilters,
+)
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+    SessionHint,
+)
+
+# Result type of the guarded operation; the proxies below preserve it.
+_T = TypeVar('_T')
 
 
 @dataclass(eq=False)
@@ -91,7 +108,7 @@ class CircuitBreaker:
 
     # --- guarding ----------------------------------------------------------
 
-    async def call(self, operation: Callable[[], Awaitable[Any]]) -> Any:
+    async def call(self, operation: Callable[[], Awaitable[_T]]) -> _T:
         """Run ``operation()`` under the breaker.
 
         Raises ``CircuitOpenError`` immediately (fail fast) when open; retries
@@ -135,10 +152,12 @@ class CircuitBreaker:
 
 
 @dataclass
-class CircuitBreakerChatsRepository:
+class CircuitBreakerChatsRepository(BaseChatsRepository):
     """Chats repository proxy failing fast when the shared breaker is open."""
 
-    inner: Any
+    # Typed against the ABC so every guarded call site is checked; any
+    # BaseChatsRepository implementation (Mongo, in-memory, another proxy) fits.
+    inner: BaseChatsRepository
     breaker: CircuitBreaker
 
     async def check_chat_exists_by_title(self, title: str) -> bool:
@@ -146,27 +165,32 @@ class CircuitBreakerChatsRepository:
             lambda: self.inner.check_chat_exists_by_title(title=title),
         )
 
-    async def get_chat_by_oid(self, oid: str) -> Any:
+    async def get_chat_by_oid(self, oid: str) -> Chat | None:
         return await self.breaker.call(
             lambda: self.inner.get_chat_by_oid(oid=oid),
         )
 
-    async def add_chat(self, chat: Any, session=None) -> None:
+    async def add_chat(self, chat: Chat, session: SessionHint | None = None) -> None:
         await self.breaker.call(
             lambda: self.inner.add_chat(chat, session=session),
         )
 
-    async def get_all_chats(self, filters: Any) -> Any:
+    async def get_all_chats(self, filters: GetAllChatsFilters) -> tuple[list[Chat], int]:
         return await self.breaker.call(
             lambda: self.inner.get_all_chats(filters=filters),
         )
 
-    async def delete_chat_by_oid(self, chat_oid: str, session=None) -> None:
+    async def delete_chat_by_oid(self, chat_oid: str, session: SessionHint | None = None) -> None:
         await self.breaker.call(
             lambda: self.inner.delete_chat_by_oid(chat_oid, session=session),
         )
 
-    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str, session=None) -> None:
+    async def add_telegram_listener(
+        self,
+        chat_oid: str,
+        telegram_chat_id: str,
+        session: SessionHint | None = None,
+    ) -> None:
         await self.breaker.call(
             lambda: self.inner.add_telegram_listener(
                 chat_oid=chat_oid,
@@ -175,25 +199,25 @@ class CircuitBreakerChatsRepository:
             ),
         )
 
-    async def get_all_chat_listeners(self, chat_oid: str) -> Any:
+    async def get_all_chat_listeners(self, chat_oid: str) -> Iterable[ChatListener]:
         return await self.breaker.call(
             lambda: self.inner.get_all_chat_listeners(chat_oid=chat_oid),
         )
 
 
 @dataclass
-class CircuitBreakerMessagesRepository:
+class CircuitBreakerMessagesRepository(BaseMessagesRepository):
     """Messages repository proxy failing fast when the shared breaker is open."""
 
-    inner: Any
+    inner: BaseMessagesRepository
     breaker: CircuitBreaker
 
-    async def add_message(self, message: Any, session=None) -> None:
+    async def add_message(self, message: Message, session: SessionHint | None = None) -> None:
         await self.breaker.call(
             lambda: self.inner.add_message(message, session=session),
         )
 
-    async def get_messages(self, chat_oid: str, filters: Any) -> Any:
+    async def get_messages(self, chat_oid: str, filters: GetMessagesFilters) -> tuple[list[Message], int]:
         return await self.breaker.call(
             lambda: self.inner.get_messages(chat_oid=chat_oid, filters=filters),
         )

@@ -1,4 +1,5 @@
 import asyncio
+from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 
 from fastapi import (
@@ -7,7 +8,13 @@ from fastapi import (
 	status,
 )
 from fastapi.responses import JSONResponse
-from prometheus_fastapi_instrumentator import PrometheusFastApiInstrumentator
+
+# Direct import from the defining module: prometheus_fastapi_instrumentator's
+# __init__ re-exports it implicitly, which strict mypy (no_implicit_reexport)
+# rejects.
+from prometheus_fastapi_instrumentator.instrumentation import (
+	PrometheusFastApiInstrumentator,
+)
 
 from application.api.auth.handlers import router as auth_router
 from application.api.lifespan import (
@@ -31,10 +38,10 @@ from settings.config import Config
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI):
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 	await init_message_broker(app)
-	relay_task: asyncio.Task = await start_relay(app)
-	kafka_consumer_task: asyncio.Task = await start_kafka_consumer(app)
+	relay_task: asyncio.Task[None] = await start_relay(app)
+	kafka_consumer_task: asyncio.Task[None] = await start_kafka_consumer(app)
 	yield
 	await stop_kafka_consumer(kafka_consumer_task, app)
 	await stop_relay(relay_task)

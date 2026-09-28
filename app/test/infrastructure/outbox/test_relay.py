@@ -1,7 +1,9 @@
+from collections.abc import AsyncIterator
 from datetime import (
 	UTC,
 	datetime,
 )
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -33,7 +35,7 @@ def _value(name: str) -> float:
 	return value if value is not None else 0.0
 
 
-def _hist_value(name: str, labels: dict, *, sample: str = '_count') -> float:
+def _hist_value(name: str, labels: dict[str, str], *, sample: str = '_count') -> float:
 	# sample includes its own leading underscore (_count/_sum), e.g.
 	# get_sample_value('outbox_publish_duration_seconds_count', {'topic': ...}).
 	value = REGISTRY.get_sample_value(name + sample, labels)
@@ -60,9 +62,9 @@ def _make_row(topic: str = 'chat-events', sent: bool = False) -> OutboxRow:
 class FakeBroker(BaseMessageBroker):
 	def __init__(self, fail: bool = False) -> None:
 		self.fail = fail
-		self.sent: list[tuple] = []
+		self.sent: list[tuple[str, bytes, bytes]] = []
 
-	async def send_message(self, key: bytes, topic: str, value: bytes) -> None:
+	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
 		if self.fail:
 			raise RuntimeError('kafka down')
 		self.sent.append((topic, key, value))
@@ -73,10 +75,10 @@ class FakeBroker(BaseMessageBroker):
 	async def close(self) -> None:
 		...
 
-	async def start_consuming(self, topic: str):
-		...
+	def start_consuming(self, topic: str) -> AsyncIterator[dict[str, Any]]:
+		raise NotImplementedError
 
-	async def stop_consuming(self) -> None:
+	def stop_consuming(self) -> None:
 		...
 
 
@@ -95,8 +97,8 @@ def _build_relay(
 
 
 @pytest.fixture
-def metric_baselines():
-	baselines = {name: _value(name) for name in METRIC_NAMES}
+def metric_baselines() -> dict[str, Any]:
+	baselines: dict[str, Any] = {name: _value(name) for name in METRIC_NAMES}
 	baselines['kafka_messages_sent_total'] = {
 		topic: _kafka_sent_value(topic) for topic in KAFKA_SENT_TOPICS
 	}
@@ -104,7 +106,7 @@ def metric_baselines():
 
 
 @pytest.mark.asyncio
-async def test_relay_publishes_unsent_rows_and_marks_sent(metric_baselines):
+async def test_relay_publishes_unsent_rows_and_marks_sent(metric_baselines: dict[str, Any]) -> None:
 	repo = MemoryOutboxRepository()
 	repo._outbox.extend([_make_row(), _make_row()])
 	broker = FakeBroker()
@@ -124,7 +126,7 @@ async def test_relay_publishes_unsent_rows_and_marks_sent(metric_baselines):
 
 
 @pytest.mark.asyncio
-async def test_relay_counts_sends_per_topic(metric_baselines):
+async def test_relay_counts_sends_per_topic(metric_baselines: dict[str, Any]) -> None:
 	# G9 (ADR-0006 Chunk 2.2): sends must be attributable per topic.
 	repo = MemoryOutboxRepository()
 	repo._outbox.extend([_make_row(topic='chat-events'), _make_row(topic='new-messages')])
@@ -144,7 +146,7 @@ async def test_relay_counts_sends_per_topic(metric_baselines):
 
 
 @pytest.mark.asyncio
-async def test_relay_observes_publish_duration_per_topic():
+async def test_relay_observes_publish_duration_per_topic() -> None:
 	# Chunk 2.3 (ADR-0006): each successful send adds one observation per topic.
 	repo = MemoryOutboxRepository()
 	repo._outbox.extend([_make_row(topic='chat-events'), _make_row(topic='new-messages')])
@@ -171,7 +173,7 @@ async def test_relay_observes_publish_duration_per_topic():
 
 
 @pytest.mark.asyncio
-async def test_relay_observes_duration_on_failed_send_too():
+async def test_relay_observes_duration_on_failed_send_too() -> None:
 	# The histogram must capture failed attempts as well (timeout latency is
 	# exactly what you need to see during a Kafka outage).
 	repo = MemoryOutboxRepository()
@@ -194,7 +196,7 @@ async def test_relay_observes_duration_on_failed_send_too():
 
 
 @pytest.mark.asyncio
-async def test_relay_ignores_already_sent_rows(metric_baselines):
+async def test_relay_ignores_already_sent_rows(metric_baselines: dict[str, Any]) -> None:
 	repo = MemoryOutboxRepository()
 	repo._outbox.extend([_make_row(sent=True)])
 	broker = FakeBroker()
@@ -208,7 +210,7 @@ async def test_relay_ignores_already_sent_rows(metric_baselines):
 
 
 @pytest.mark.asyncio
-async def test_relay_keeps_rows_unsent_on_broker_failure(metric_baselines):
+async def test_relay_keeps_rows_unsent_on_broker_failure(metric_baselines: dict[str, Any]) -> None:
 	repo = MemoryOutboxRepository()
 	repo._outbox.extend([_make_row(), _make_row()])
 	broker = FakeBroker(fail=True)
@@ -241,7 +243,7 @@ def _state_gauge(name: str) -> float:
 
 
 @pytest.mark.asyncio
-async def test_relay_trips_breaker_after_consecutive_failures():
+async def test_relay_trips_breaker_after_consecutive_failures() -> None:
 	# The batch aborts on the FIRST failure, so each tick contributes exactly
 	# one failure to the breaker (the remaining rows wait for the next tick).
 	repo = MemoryOutboxRepository()
@@ -262,7 +264,7 @@ async def test_relay_trips_breaker_after_consecutive_failures():
 
 
 @pytest.mark.asyncio
-async def test_relay_skips_batch_fails_fast_while_breaker_open():
+async def test_relay_skips_batch_fails_fast_while_breaker_open() -> None:
 	repo = MemoryOutboxRepository()
 	repo._outbox.extend([_make_row() for _ in range(3)])
 	broker = FakeBroker()  # Kafka actually healthy — breaker forced open
@@ -288,7 +290,7 @@ async def test_relay_skips_batch_fails_fast_while_breaker_open():
 
 
 @pytest.mark.asyncio
-async def test_relay_trips_mid_batch_and_skips_next_tick_without_histogram_sample():
+async def test_relay_trips_mid_batch_and_skips_next_tick_without_histogram_sample() -> None:
 	# Mid-batch trip, modeled the only way it happens in production: row 1 is
 	# sent, then row 2's send FAILS hard — the failure trips the breaker
 	# (threshold=1) and the batch aborts with row 1 marked sent. The NEXT tick
@@ -303,11 +305,14 @@ async def test_relay_trips_mid_batch_and_skips_next_tick_without_histogram_sampl
 	repo._outbox.extend([_make_row() for _ in range(3)])
 
 	class FailOnSecondSendBroker(FakeBroker):
-		async def send_message(self, key: bytes, topic: str, value: bytes) -> None:
+		breaker: CircuitBreaker | None = None
+
+		async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
 			if len(self.sent) >= 1:  # row 2: Kafka goes down
+				assert self.breaker is not None
 				self.breaker._open()
 				raise RuntimeError('kafka down mid-batch')
-			await super().send_message(key, topic, value)
+			await super().send_message(topic, key, value)
 
 	breaker = CircuitBreaker(name='relay-test-race', failure_threshold=1, recovery_time=60)
 	broker = FailOnSecondSendBroker()
@@ -335,7 +340,7 @@ async def test_relay_trips_mid_batch_and_skips_next_tick_without_histogram_sampl
 
 
 @pytest.mark.asyncio
-async def test_relay_resumes_publishing_after_breaker_recovery():
+async def test_relay_resumes_publishing_after_breaker_recovery() -> None:
 	repo = MemoryOutboxRepository()
 	row = _make_row()
 	repo._outbox.append(row)
@@ -359,7 +364,7 @@ async def test_relay_resumes_publishing_after_breaker_recovery():
 
 
 @pytest.mark.asyncio
-async def test_relay_without_breaker_behaves_as_before():
+async def test_relay_without_breaker_behaves_as_before() -> None:
 	# Back-compat guard: circuit_breaker=None (tests, dummy container) must
 	# keep the legacy single-send-per-row path without breaker interactions.
 	repo = MemoryOutboxRepository()
@@ -374,7 +379,7 @@ async def test_relay_without_breaker_behaves_as_before():
 
 
 @pytest.mark.asyncio
-async def test_relay_outbox_pending_reflects_true_backlog_beyond_batch_size(metric_baselines):
+async def test_relay_outbox_pending_reflects_true_backlog_beyond_batch_size(metric_baselines: dict[str, Any]) -> None:
 	# G10 regression (ADR-0006 Chunk 2.1): the gauge must report the FULL unsent
 	# backlog, not just the batch_size-capped snapshot from get_unsent().
 	repo = MemoryOutboxRepository()

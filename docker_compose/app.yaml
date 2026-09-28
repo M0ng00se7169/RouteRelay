@@ -3,6 +3,9 @@ services:
     build:
       context: ..
       dockerfile: Dockerfile
+      # The Dockerfile's last stage is the slim prod image (what CD pushes to
+      # GHCR); local dev needs the dev stage: dev-group tools + root user.
+      target: dev
     container_name: main-app
     ports:
       - "${API_PORT}:8000"

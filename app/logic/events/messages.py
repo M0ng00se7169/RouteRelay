@@ -1,5 +1,6 @@
 import logging
 from dataclasses import dataclass
+from typing import Any
 
 from domain.events.messages import (
     ChatDeletedEvent,
@@ -15,7 +16,9 @@ from infrastructure.metrics import (
     telegram_notifications_failed_total,
     telegram_notifications_sent_total,
 )
-from logic.events.base import EventHandler
+from logic.events.base import (
+    EventHandler,
+)
 
 # NOTE: Kafka delivery is no longer performed here. The Transaction Outbox relay
 # (infrastructure.outbox.relay.OutboxRelay) is the sole writer to Kafka, reading
@@ -28,14 +31,14 @@ logger = logging.getLogger(__name__)
 
 
 @dataclass(frozen=True)
-class NewChatCreatedEventHandler(EventHandler):
+class NewChatCreatedEventHandler(EventHandler[NewChatCreatedEvent, Any]):
     async def handle(self, event: NewChatCreatedEvent) -> None:
         # Outbox relay delivers the event to Kafka; no in-process side effect here.
         ...
 
 
 @dataclass(frozen=True)
-class ListenerAddedEventHandler(EventHandler):
+class ListenerAddedEventHandler(EventHandler[ListenerAddedEvent, Any]):
     notification_client: BaseNotificationClient | None = None
 
     async def handle(self, event: ListenerAddedEvent) -> None:
@@ -57,19 +60,19 @@ class ListenerAddedEventHandler(EventHandler):
                 logger.warning("Failed to send Telegram notification: %s", e)
 
 @dataclass(frozen=True)
-class NewMessageReceivedEventHandler(EventHandler):
+class NewMessageReceivedEventHandler(EventHandler[NewMessageReceivedEvent, Any]):
     async def handle(self, event: NewMessageReceivedEvent) -> None:
         # Outbox relay delivers the event to Kafka; no in-process side effect here.
         ...
 
 @dataclass(frozen=True)
-class ChatDeletedEventHandler(EventHandler):
+class ChatDeletedEventHandler(EventHandler[ChatDeletedEvent, Any]):
     async def handle(self, event: ChatDeletedEvent) -> None:
         # Outbox relay delivers the event to Kafka; the disconnect is a WS concern only.
         await self.connection_manager.disconnect_all(key=event.chat_oid)
 
 @dataclass(frozen=True)
-class NewMessageReceivedFromBrokerEventHandler(EventHandler):
+class NewMessageReceivedFromBrokerEventHandler(EventHandler[NewMessageReceivedFromBrokerEvent, Any]):
     async def handle(self, event: NewMessageReceivedFromBrokerEvent) -> None:
         await self.connection_manager.send_all(
             key=event.chat_oid,

@@ -7,7 +7,7 @@ from settings.security import issue_token
 from test.fixtures import init_dummy_container
 
 
-def test_app_lifespan_starts_and_stops_broker_and_relay():
+def test_app_lifespan_starts_and_stops_broker_and_relay() -> None:
 	# One shared dummy container so lifespan + requests see the same repos.
 	container = init_dummy_container()
 	app: FastAPI = create_app()
@@ -23,7 +23,7 @@ def test_app_lifespan_starts_and_stops_broker_and_relay():
 		assert resp.status_code == 201
 
 
-def test_app_lifespan_used_by_client_fixture():
+def test_app_lifespan_used_by_client_fixture() -> None:
 	# The shared dummy container is exercised by normal requests, which run
 	# the lifespan (broker start/close + relay start/stop) under the hood.
 	container = init_dummy_container()

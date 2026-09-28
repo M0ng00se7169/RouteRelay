@@ -13,8 +13,8 @@ async def test_create_chat_success(
         app: FastAPI,
         client: TestClient,
         faker: Faker,
-        auth_headers: dict,
-):
+        auth_headers: dict[str, str],
+) -> None:
     url = app.url_path_for('create_chat_handler')
     title = faker.text()[:100]
     response: Response = client.post(url=url, json={'title': title}, headers=auth_headers)
@@ -30,8 +30,8 @@ async def test_create_chat_fail_text_too_long(
         app: FastAPI,
         client: TestClient,
         faker: Faker,
-        auth_headers: dict,
-):
+        auth_headers: dict[str, str],
+) -> None:
     url = app.url_path_for('create_chat_handler')
     title = faker.text(max_nb_chars=500)
     response: Response = client.post(url=url, json={'title': title}, headers=auth_headers)
@@ -46,8 +46,8 @@ async def test_create_chat_fail_text_too_long(
 async def test_create_chat_fail_text_empty(
         app: FastAPI,
         client: TestClient,
-        auth_headers: dict,
-):
+        auth_headers: dict[str, str],
+) -> None:
     url = app.url_path_for('create_chat_handler')
     response: Response = client.post(url=url, json={'title': ''}, headers=auth_headers)
 

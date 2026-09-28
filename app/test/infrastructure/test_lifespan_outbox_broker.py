@@ -1,5 +1,9 @@
 import asyncio
+from collections.abc import (
+	AsyncIterator,
+)
 from contextlib import asynccontextmanager
+from typing import Any
 from unittest.mock import (
 	AsyncMock,
 	MagicMock,
@@ -36,30 +40,37 @@ from logic.init import init_container
 
 
 class FakeContainer:
-	def __init__(self, mapping):
+	def __init__(self, mapping: dict[type[Any], Any]) -> None:
 		self._mapping = mapping
 
-	def __call__(self):
+	def __call__(self) -> 'FakeContainer':
 		return self
 
-	def resolve(self, cls):
+	def resolve(self, cls: type[Any]) -> Any:
 		return self._mapping[cls]
 
-	def register(self, service=None, factory=None, instance=None, scope=None, **kwargs):
+	def register(
+		self,
+		service: type[Any] | None = None,
+		factory: Any = None,
+		instance: Any = None,
+		scope: Any = None,
+		**kwargs: Any,
+	) -> None:
 		pass
 
 
 # --- lifespan glue ---------------------------------------------------------
 
 
-def _app_with(container):
+def _app_with(container: FakeContainer) -> FastAPI:
 	app = FastAPI()
 	app.dependency_overrides = {init_container: container}
 	return app
 
 
 @pytest.mark.asyncio
-async def test_init_message_broker_starts_broker():
+async def test_init_message_broker_starts_broker() -> None:
 	broker = AsyncMock(spec=BaseMessageBroker)
 	container = FakeContainer({BaseMessageBroker: broker})
 	app = _app_with(container)
@@ -70,7 +81,7 @@ async def test_init_message_broker_starts_broker():
 
 
 @pytest.mark.asyncio
-async def test_close_message_broker_closes_broker():
+async def test_close_message_broker_closes_broker() -> None:
 	broker = AsyncMock(spec=BaseMessageBroker)
 	container = FakeContainer({BaseMessageBroker: broker})
 	app = _app_with(container)
@@ -81,7 +92,7 @@ async def test_close_message_broker_closes_broker():
 
 
 @pytest.mark.asyncio
-async def test_start_relay_returns_task():
+async def test_start_relay_returns_task() -> None:
 	relay = AsyncMock()
 	relay.run = AsyncMock()
 	container = FakeContainer({OutboxRelay: relay})
@@ -94,7 +105,7 @@ async def test_start_relay_returns_task():
 
 
 @pytest.mark.asyncio
-async def test_stop_relay_cancels_task():
+async def test_stop_relay_cancels_task() -> None:
 	relay = AsyncMock()
 	relay.run = AsyncMock()
 	container = FakeContainer({OutboxRelay: relay})
@@ -107,20 +118,20 @@ async def test_stop_relay_cancels_task():
 
 
 @pytest.mark.asyncio
-async def test_stop_relay_handles_none():
+async def test_stop_relay_handles_none() -> None:
 	# None should be a no-op (no exception raised).
 	await stop_relay(None)
 
 
 @pytest.mark.asyncio
-async def test_lifespan_runs_all_phases():
+async def test_lifespan_runs_all_phases() -> None:
 	broker = AsyncMock(spec=BaseMessageBroker)
 	relay = AsyncMock()
 	relay.run = AsyncMock()
 	container = FakeContainer({BaseMessageBroker: broker, OutboxRelay: relay})
 
 	@asynccontextmanager
-	async def fake_lifespan(app):
+	async def fake_lifespan(app: FastAPI) -> AsyncIterator[None]:
 		await init_message_broker(app)
 		started = await start_relay(app)
 		try:
@@ -144,26 +155,31 @@ async def test_lifespan_runs_all_phases():
 
 
 @pytest.mark.asyncio
-async def test_kafka_start_creates_producer_and_consumer():
+async def test_kafka_start_creates_producer_and_consumer() -> None:
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 
 	producer = AsyncMock()
 	consumer = AsyncMock()
-	producer_kwargs: dict = {}
+	producer_kwargs: dict[str, Any] = {}
 
-	def _capture_producer(**kwargs):
+	def _capture_producer(**kwargs: Any) -> AsyncMock:
 		producer_kwargs.update(kwargs)
 		return producer
 
 	# Patch the aiokafka classes so start() does not open a real network connection.
 	import infrastructure.message_brokers.kafka as kafka_mod
-	orig_p, orig_c = kafka_mod.AIOKafkaProducer, kafka_mod.AIOKafkaConsumer
-	kafka_mod.AIOKafkaProducer = _capture_producer
-	kafka_mod.AIOKafkaConsumer = lambda **k: consumer
+	orig_p = kafka_mod.AIOKafkaProducer  # type: ignore[attr-defined]
+	orig_c = kafka_mod.AIOKafkaConsumer  # type: ignore[attr-defined]
+	# Direct assignment (ruff B010 flags setattr with constant names). The set
+	# targets are module attributes mypy does not track as assignable — hence
+	# the getattr/setattr indirection below instead of plain assignment.
+	setattr(kafka_mod, 'AIOKafkaProducer', _capture_producer)  # noqa: B010
+	setattr(kafka_mod, 'AIOKafkaConsumer', lambda **k: consumer)  # noqa: B010
 	try:
 		await broker.start()
 	finally:
-		kafka_mod.AIOKafkaProducer, kafka_mod.AIOKafkaConsumer = orig_p, orig_c
+		setattr(kafka_mod, 'AIOKafkaProducer', orig_p)  # noqa: B010
+		setattr(kafka_mod, 'AIOKafkaConsumer', orig_c)  # noqa: B010
 
 	assert broker.producer is producer
 	assert broker.consumer is consumer
@@ -176,7 +192,7 @@ async def test_kafka_start_creates_producer_and_consumer():
 
 
 @pytest.mark.asyncio
-async def test_kafka_send_message_awaits_producer_ack():
+async def test_kafka_send_message_awaits_producer_ack() -> None:
 	# Regression (live drill 2026-09-25): send_message used to await only
 	# producer.send(), which merely buffers and returns a delivery future —
 	# broker failures never surfaced, rows were marked sent against a dead
@@ -194,7 +210,7 @@ async def test_kafka_send_message_awaits_producer_ack():
 
 
 @pytest.mark.asyncio
-async def test_kafka_send_message_before_start_raises():
+async def test_kafka_send_message_before_start_raises() -> None:
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	broker.producer = None
 
@@ -203,7 +219,7 @@ async def test_kafka_send_message_before_start_raises():
 
 
 @pytest.mark.asyncio
-async def test_kafka_close_stops_producer_and_consumer():
+async def test_kafka_close_stops_producer_and_consumer() -> None:
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	producer = AsyncMock()
 	consumer = AsyncMock()
@@ -217,7 +233,7 @@ async def test_kafka_close_stops_producer_and_consumer():
 
 
 @pytest.mark.asyncio
-async def test_kafka_close_no_producer_no_consumer():
+async def test_kafka_close_no_producer_no_consumer() -> None:
 	# close() must not raise when nothing was started.
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	broker.producer = None
@@ -227,7 +243,7 @@ async def test_kafka_close_no_producer_no_consumer():
 
 
 @pytest.mark.asyncio
-async def test_kafka_start_consuming_before_start_raises():
+async def test_kafka_start_consuming_before_start_raises() -> None:
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	broker.consumer = None
 
@@ -237,7 +253,7 @@ async def test_kafka_start_consuming_before_start_raises():
 
 
 @pytest.mark.asyncio
-async def test_kafka_start_consuming_yields_messages():
+async def test_kafka_start_consuming_yields_messages() -> None:
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	consumer = AsyncMock()
 	broker.consumer = consumer
@@ -246,7 +262,7 @@ async def test_kafka_start_consuming_yields_messages():
 
 	msgs = [MagicMock(value=dumps({'a': 1})), MagicMock(value=dumps({'a': 2}))]
 
-	async def _gen():
+	async def _gen() -> AsyncIterator[MagicMock]:
 		for m in msgs:
 			yield m
 
@@ -262,37 +278,39 @@ async def test_kafka_start_consuming_yields_messages():
 
 
 @pytest.mark.asyncio
-async def test_kafka_stop_consuming_unsubscribes():
+async def test_kafka_stop_consuming_unsubscribes() -> None:
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	consumer = AsyncMock()
 	consumer.unsubscribe = MagicMock()
 	broker.consumer = consumer
 
-	await broker.stop_consuming()
+	# stop_consuming() is sync (the ABC contract); just call it.
+	broker.stop_consuming()
 
 	consumer.unsubscribe.assert_called_once()
 
 
 @pytest.mark.asyncio
-async def test_kafka_stop_consuming_no_consumer():
+async def test_kafka_stop_consuming_no_consumer() -> None:
 	# stop_consuming() must be a no-op when no consumer exists.
 	broker = KafkaMessageBroker(bootstrap_servers='localhost:9092')
 	broker.consumer = None
 
-	await broker.stop_consuming()
+	# Sync contract: plain call, nothing to await.
+	broker.stop_consuming()
 
 
 # --- Outbox mapper ---------------------------------------------------------
 
 
-def test_resolve_topic_known_events():
+def test_resolve_topic_known_events() -> None:
 	assert resolve_topic(NewChatCreatedEvent(chat_oid='c', chat_title='t')) == 'new-chats-topic'
 	assert resolve_topic(NewMessageReceivedEvent(message_text='m', message_oid='m1', chat_oid='c')) == 'new-messages'
 	assert resolve_topic(ChatDeletedEvent(chat_oid='c')) == 'chat-deleted-topic'
 	assert resolve_topic(NewChatCreatedEvent(chat_oid='c', chat_title='t')) == 'new-chats-topic'
 
 
-def test_resolve_topic_unknown_raises():
+def test_resolve_topic_unknown_raises() -> None:
 	class UnknownEvent:
 		event_id = 'x'
 		occurred_at = None
@@ -305,20 +323,20 @@ def test_resolve_topic_unknown_raises():
 
 
 class _Cursor:
-	def __init__(self, docs):
+	def __init__(self, docs: list[dict[str, Any]]) -> None:
 		self._docs = docs
 
-	def limit(self, n):
+	def limit(self, n: int) -> '_Cursor':
 		self._docs = self._docs[:n]
 		return self
 
-	async def __aiter__(self):
+	async def __aiter__(self) -> AsyncIterator[dict[str, Any]]:
 		for d in self._docs:
 			yield d
 
 
 @pytest.mark.asyncio
-async def test_mongo_outbox_save_events():
+async def test_mongo_outbox_save_events() -> None:
 	collection = MagicMock()
 	collection.insert_many = AsyncMock()
 	resolver = MagicMock(return_value='t')
@@ -333,7 +351,7 @@ async def test_mongo_outbox_save_events():
 
 
 @pytest.mark.asyncio
-async def test_mongo_outbox_save_events_empty():
+async def test_mongo_outbox_save_events_empty() -> None:
 	collection = MagicMock()
 	collection.insert_many = AsyncMock()
 	repo = MongoOutboxRepository(collection=collection, _topic_resolver=MagicMock())
@@ -344,7 +362,7 @@ async def test_mongo_outbox_save_events_empty():
 
 
 @pytest.mark.asyncio
-async def test_mongo_outbox_get_unsent():
+async def test_mongo_outbox_get_unsent() -> None:
 	collection = MagicMock()
 	doc = {'_id': 'x', 'event_id': 'e', 'topic': 't', 'key': b'k', 'payload': b'p', 'occurred_at': None, 'sent': False, 'sent_at': None}
 	collection.find = MagicMock(return_value=_Cursor([doc]))
@@ -358,7 +376,7 @@ async def test_mongo_outbox_get_unsent():
 
 
 @pytest.mark.asyncio
-async def test_mongo_outbox_mark_as_sent():
+async def test_mongo_outbox_mark_as_sent() -> None:
 	collection = MagicMock()
 	collection.update_many = AsyncMock()
 	repo = MongoOutboxRepository(collection=collection, _topic_resolver=MagicMock())
@@ -369,7 +387,7 @@ async def test_mongo_outbox_mark_as_sent():
 
 
 @pytest.mark.asyncio
-async def test_mongo_outbox_count_unsent():
+async def test_mongo_outbox_count_unsent() -> None:
 	collection = MagicMock()
 	collection.count_documents = AsyncMock(return_value=7)
 	repo = MongoOutboxRepository(collection=collection, _topic_resolver=MagicMock())
@@ -384,7 +402,7 @@ async def test_mongo_outbox_count_unsent():
 
 
 @pytest.mark.asyncio
-async def test_relay_tick_publishes_and_marks_sent():
+async def test_relay_tick_publishes_and_marks_sent() -> None:
 	rows = [
 		MagicMock(_id='r1', topic='t', key=b'k', payload=b'p'),
 		MagicMock(_id='r2', topic='t', key=b'k', payload=b'p'),
@@ -404,7 +422,7 @@ async def test_relay_tick_publishes_and_marks_sent():
 
 
 @pytest.mark.asyncio
-async def test_relay_tick_no_rows():
+async def test_relay_tick_no_rows() -> None:
 	repo = AsyncMock()
 	repo.get_unsent = AsyncMock(return_value=[])
 	repo.count_unsent = AsyncMock(return_value=0)
@@ -418,7 +436,7 @@ async def test_relay_tick_no_rows():
 
 
 @pytest.mark.asyncio
-async def test_relay_tick_stops_on_error():
+async def test_relay_tick_stops_on_error() -> None:
 	rows = [
 		MagicMock(_id='r1', topic='t', key=b'k', payload=b'p'),
 		MagicMock(_id='r2', topic='t', key=b'k', payload=b'p'),
@@ -439,7 +457,7 @@ async def test_relay_tick_stops_on_error():
 
 
 @pytest.mark.asyncio
-async def test_relay_run_loops_until_cancelled():
+async def test_relay_run_loops_until_cancelled() -> None:
 	repo = AsyncMock()
 	repo.get_unsent = AsyncMock(return_value=[])
 	repo.count_unsent = AsyncMock(return_value=0)
@@ -453,7 +471,7 @@ async def test_relay_run_loops_until_cancelled():
 		await task
 
 
-def test_build_relay_uses_config():
+def test_build_relay_uses_config() -> None:
 	from infrastructure.outbox.relay import build_relay
 
 	repo = AsyncMock()
@@ -472,7 +490,7 @@ def test_build_relay_uses_config():
 
 
 @pytest.mark.asyncio
-async def test_new_chat_created_handler_is_noop():
+async def test_new_chat_created_handler_is_noop() -> None:
 	handler = NewChatCreatedEventHandler(message_broker=AsyncMock(), connection_manager=AsyncMock())
 	event = NewChatCreatedEvent(chat_oid='c', chat_title='t')
 
@@ -480,7 +498,7 @@ async def test_new_chat_created_handler_is_noop():
 
 
 @pytest.mark.asyncio
-async def test_new_message_received_handler_is_noop():
+async def test_new_message_received_handler_is_noop() -> None:
 	handler = NewMessageReceivedEventHandler(message_broker=AsyncMock(), connection_manager=AsyncMock())
 	event = NewMessageReceivedEvent(message_text='m', message_oid='m1', chat_oid='c')
 
@@ -488,7 +506,7 @@ async def test_new_message_received_handler_is_noop():
 
 
 @pytest.mark.asyncio
-async def test_chat_deleted_handler_disconnects_all():
+async def test_chat_deleted_handler_disconnects_all() -> None:
 	manager = AsyncMock()
 	handler = ChatDeletedEventHandler(message_broker=AsyncMock(), connection_manager=manager)
 	event = ChatDeletedEvent(chat_oid='c1')
@@ -499,7 +517,7 @@ async def test_chat_deleted_handler_disconnects_all():
 
 
 @pytest.mark.asyncio
-async def test_new_message_from_broker_handler():
+async def test_new_message_from_broker_handler() -> None:
 	manager = AsyncMock()
 	handler = NewMessageReceivedFromBrokerEventHandler(connection_manager=manager, message_broker=AsyncMock())
 	event = NewMessageReceivedFromBrokerEvent(message='hi', chat_oid='c1')
@@ -513,7 +531,7 @@ async def test_new_message_from_broker_handler():
 
 
 @pytest.mark.asyncio
-async def test_mongo_session_provider_returns_session():
+async def test_mongo_session_provider_returns_session() -> None:
 	client = AsyncMock()
 	client.start_session = AsyncMock(return_value='session-obj')
 	provider = MongoSessionProvider(client=client)

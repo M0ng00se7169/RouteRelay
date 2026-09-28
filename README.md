@@ -19,8 +19,8 @@ seconds without a rebuild. Follow the trail:
 
 | Step | What happens | Where to look |
 |---|---|---|
-| **1 · Push / PR** | Four CI jobs run on every push and pull request: the repo's own pre-commit suite (lint), the full pytest suite (self-contained — no services needed), `promtool` + `amtool` validation of the Prometheus/Alertmanager configs, and a Buildx image build | [CI runs](https://github.com/M0ng00se7169/RouteRelay/actions/workflows/ci.yml) · [workflow](.github/workflows/ci.yml) |
-| **2 · Merge to `main`** | CD waits for the CI run on the *same commit* to pass, then builds and pushes the image to GitHub Container Registry — tagged `latest` plus the immutable commit SHA, authenticated with the built-in `GITHUB_TOKEN` (no PATs) | [CD runs](https://github.com/M0ng00se7169/RouteRelay/actions/workflows/cd.yml) · [workflow](.github/workflows/cd.yml) · [packages](https://github.com/M0ng00se7169?tab=packages) |
+| **1 · Push / PR** | Five CI jobs run on every push and pull request: the repo's own pre-commit suite (lint), a strict `mypy` type check over the whole app package, the full pytest suite (self-contained — no services needed), `promtool` + `amtool` validation of the Prometheus/Alertmanager configs, and a Buildx image build | [CI runs](https://github.com/M0ng00se7169/RouteRelay/actions/workflows/ci.yml) · [workflow](.github/workflows/ci.yml) |
+| **2 · Merge to `main`** | CD waits for the CI run on the *same commit* to pass (tests **and** type check), then builds and pushes the image to GitHub Container Registry — tagged `latest` plus the immutable commit SHA, authenticated with the built-in `GITHUB_TOKEN` (no PATs) | [CD runs](https://github.com/M0ng00se7169/RouteRelay/actions/workflows/cd.yml) · [workflow](.github/workflows/cd.yml) · [packages](https://github.com/M0ng00se7169?tab=packages) |
 | **3 · Deploy** | `main-app` runs from the pinned GHCR tag via a deploy-specific compose file (no dev bind-mount, no `--reload`, no rebuild — compose's override merge cannot remove keys, so the file *replaces* the service) | [deploy & rollback runbook](docs/runbooks/deploy-and-rollback.md) |
 | **4 · Roll back** | Pin the previous good `APP_IMAGE=<sha>` in `.env`, re-run `up` — done in seconds, no `git revert`, no rebuild; the app is stateless by design (transactional outbox), so Mongo/Kafka/Alertmanager state survives the swap | [runbook → rollback](docs/runbooks/deploy-and-rollback.md) |
 
@@ -46,7 +46,7 @@ inhibition pairs, Telegram transport, silencing procedure).
 | **Validation / config**  | Pydantic, pydantic-settings           |
 | **Serialization**        | orjson                                |
 | **Dependency injection** | punq                                  |
-| **Packaging**            | Poetry                                |
+| **Packaging**            | uv                                    |
 | **Containers**           | Docker, Docker Compose                |
 | **Testing**              | pytest, pytest-asyncio, Faker, httpx  |
 | **Code quality**         | pre-commit, Ruff, isort, pyupgrade    |
@@ -92,7 +92,7 @@ fastapi_examples/
 ├── Makefile
 ├── prometheus.yml
 ├── pyproject.toml
-└── poetry.lock
+└── uv.lock
 ```
 
 ---
@@ -331,7 +331,7 @@ Additional `.env` variables used by Docker Compose:
 ### Prerequisites
 
 - Docker & Docker Compose
-- Poetry (for local development)
+- [uv](https://docs.astral.sh/uv/) (for local development)
 - Make (optional, for convenience targets)
 
 
@@ -388,8 +388,8 @@ make app        # FastAPI application
 ### 4. Local development (without Docker)
 
 ```bash
-poetry install
-poetry run uvicorn --factory application.api.main:create_app --reload --host 0.0.0.0 --port 8000
+uv sync
+uv run uvicorn --factory application.api.main:create_app --reload --host 0.0.0.0 --port 8000
 ```
 
 Run from the `app/` directory or ensure `app/` is on `PYTHONPATH`. MongoDB and Kafka must be reachable at the configured URLs.
@@ -397,7 +397,7 @@ Run from the `app/` directory or ensure `app/` is on `PYTHONPATH`. MongoDB and K
 ### 5. Run tests
 
 ```bash
-poetry run pytest
+uv run pytest
 ```
 
 Tests use in-memory repositories (see `app/test/` fixtures).
@@ -405,8 +405,8 @@ Tests use in-memory repositories (see `app/test/` fixtures).
 ### 6. Pre-commit hooks
 
 ```bash
-poetry run pre-commit install
-poetry run pre-commit run --all-files
+uv run pre-commit install
+uv run pre-commit run --all-files
 ```
 
 The same suite runs as the **Lint** job in CI (see below) — if it passes locally, CI stays green.

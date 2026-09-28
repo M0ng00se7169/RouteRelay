@@ -1,4 +1,5 @@
 from functools import lru_cache
+from typing import Any
 
 from httpx import AsyncClient
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -12,6 +13,7 @@ from domain.events.messages import (
     ListenerAddedEvent,
     NewChatCreatedEvent,
     NewMessageReceivedEvent,
+    NewMessageReceivedFromBrokerEvent,
 )
 from infrastructure.integrations.notifications.clients.base import BaseNotificationClient
 from infrastructure.integrations.notifications.clients.telegram import TelegramNotificationClient
@@ -60,7 +62,6 @@ from logic.events.messages import (
     ListenerAddedEventHandler,
     NewChatCreatedEventHandler,
     NewMessageReceivedEventHandler,
-    NewMessageReceivedFromBrokerEvent,
     NewMessageReceivedFromBrokerEventHandler,
 )
 from logic.mediator.base import Mediator
@@ -79,7 +80,7 @@ from settings.config import Config
 
 
 @lru_cache(1)
-def init_container():
+def init_container() -> Container:
     return _init_container()
 
 
@@ -90,7 +91,7 @@ def _init_container() -> Container:
 
     config: Config = container.resolve(Config)
 
-    def create_mongodb_client():
+    def create_mongodb_client() -> AsyncIOMotorClient[dict[str, Any]]:
         return AsyncIOMotorClient(config.mongodb_connection_uri, serverSelectionTimeoutMS=3000)
 
     container.register(AsyncIOMotorClient, factory=create_mongodb_client, scope=Scope.singleton)

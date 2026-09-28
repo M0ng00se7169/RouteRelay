@@ -1,8 +1,9 @@
 import asyncio
+from collections.abc import AsyncIterator
 
 from punq import (
-	Container,
-	Scope,
+		Container,
+		Scope,
 )
 
 from infrastructure.message_brokers.base import BaseMessageBroker
@@ -27,15 +28,13 @@ from logic.init import (
 	build_mediator,
 	init_container,
 )
-from logic.mediator.base import (
-	EventMediator,
-	Mediator,
-)
+from logic.mediator.base import Mediator
+from logic.mediator.event import EventMediator
 from settings.config import Config
 
 
 class _NullSessionProvider(SessionProvider):
-	async def __call__(self):
+	async def __call__(self) -> None:
 		return None
 
 
@@ -49,30 +48,30 @@ class _NoopOutboxRelay(OutboxRelay):
 		return None
 
 
-async def _dummy_consumer_iterator():
+async def _dummy_consumer_iterator() -> AsyncIterator[dict[str, str]]:
 	yield {'chat_oid': 'dummy-chat-oid', 'message': 'dummy message'}
 	await asyncio.sleep(1)
 
 
-async def _dummy_start_consuming(topic: str):
+async def _dummy_start_consuming(topic: str) -> AsyncIterator[dict[str, str]]:
 	async for message in _dummy_consumer_iterator():
 		yield message
 
 
 class DummyMessageBroker:
-	async def start(self):
+	async def start(self) -> None:
 		pass
 
-	async def close(self):
+	async def close(self) -> None:
 		pass
 
-	async def send_message(self, topic: str, key: bytes, value: bytes):
+	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
 		pass
 
-	def start_consuming(self, topic: str):
+	def start_consuming(self, topic: str) -> AsyncIterator[dict[str, str]]:
 		return _dummy_start_consuming(topic)
 
-	def stop_consuming(self):
+	def stop_consuming(self) -> None:
 		pass
 
 
@@ -120,13 +119,13 @@ def init_dummy_container(*, wrap_repos_with_breaker: bool = False) -> Container:
 		SessionProvider,
 		OutboxRelay,
 	):
-		container._singletons.pop(key, None)
+		container._singletons.pop(key, None)  # type: ignore[call-overload]  # punq internals: untyped dict
 
 	# Rebuild the mediator against the overridden (in-memory) container so its
 	# command handlers are wired to the memory repositories.
 	mediator = build_mediator(container, container.resolve(Config))
-	container._singletons.pop(Mediator, None)
-	container._singletons.pop(EventMediator, None)
+	container._singletons.pop(Mediator, None)  # type: ignore[call-overload]  # punq internals: untyped dict
+	container._singletons.pop(EventMediator, None)  # type: ignore[call-overload]  # punq internals: untyped dict
 	container.register(Mediator, instance=mediator, scope=Scope.singleton)
 	container.register(EventMediator, instance=mediator, scope=Scope.singleton)
 

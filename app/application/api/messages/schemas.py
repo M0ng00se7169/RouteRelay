@@ -93,5 +93,5 @@ class ChatListenerListItemSchema(BaseModel):
     oid: str
 
     @classmethod
-    def from_entity(cls, chat_listener: ChatListener):
+    def from_entity(cls, chat_listener: ChatListener) -> 'ChatListenerListItemSchema':
         return cls(oid=chat_listener.oid)

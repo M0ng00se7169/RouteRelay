@@ -46,4 +46,4 @@ Use this checklist whenever a new capability is added to the app. It complements
 - `init.py` top-level registration + `init_mediator` registration both present.
 - Route + `from_entity` schema present.
 - At least one in-memory test covering the happy path.
-- `poetry run pre-commit run --all-files` passes (Ruff line-length 100, single quotes, tabs).
+- `uv run pre-commit run --all-files` passes (Ruff line-length 100, single quotes, tabs).

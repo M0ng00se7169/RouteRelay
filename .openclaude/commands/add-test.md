@@ -25,6 +25,6 @@ Ask the user (or take from the prompt) for:
 4. Place it next to the related tests under `app/test/...`.
 
 ## Reminder for the user
-Run it with: `cd app && poetry run pytest <path>`. Tests only resolve imports when run from `app/`.
+Run it with: `cd app && uv run pytest <path>`. Tests only resolve imports when run from `app/`.
 
 Do not edit files unless the user asks — just produce the test code.

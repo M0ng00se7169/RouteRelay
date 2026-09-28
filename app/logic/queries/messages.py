@@ -1,5 +1,6 @@
-from collections.abc import Iterable
+from collections.abc import Awaitable, Callable, Iterable
 from dataclasses import dataclass
+from typing import TypeVar
 
 from domain.entities.messages import (
     Chat,
@@ -24,28 +25,26 @@ from logic.queries.base import (
     BaseQueryHandler,
 )
 
+_T = TypeVar('_T')
 
-def _count_db_errors(operation: str, collection: str, call):
+
+async def _count_db_errors(operation: str, collection: str, call: Callable[[], Awaitable[_T]]) -> _T:
     """Await a persistence call, counting its exceptions on
     ``db_operation_errors_total`` (ADR-0006, Chunk 5.2) before re-raising.
 
     Domain errors raised by the handler around the call (e.g.
     ``ChatNotFoundException``) do not pass through here and stay uncounted.
     """
-
-    async def wrapped():
-        try:
-            return await call()
-        except Exception as e:
-            safe_inc(
-                db_operation_errors_total,
-                operation=f'{operation}.{e.__class__.__name__}',
-                collection=collection,
-                exception=e.__class__.__name__,
-            )
-            raise
-
-    return wrapped()
+    try:
+        return await call()
+    except Exception as e:
+        safe_inc(
+            db_operation_errors_total,
+            operation=f'{operation}.{e.__class__.__name__}',
+            collection=collection,
+            exception=e.__class__.__name__,
+        )
+        raise
 
 
 @dataclass(frozen=True)
@@ -70,7 +69,7 @@ class GetAllChatsListenersQuery(BaseQuery):
 
 
 @dataclass(frozen=True)
-class GetChatDetailQueryHandler(BaseQueryHandler):
+class GetChatDetailQueryHandler(BaseQueryHandler[GetChatDetailQuery, Chat]):
     chats_repository: BaseChatsRepository
     messages_repository: BaseMessagesRepository
 
@@ -87,10 +86,10 @@ class GetChatDetailQueryHandler(BaseQueryHandler):
 
 
 @dataclass(frozen=True)
-class GetMessagesQueryHandler(BaseQueryHandler):
+class GetMessagesQueryHandler(BaseQueryHandler[GetMessagesQuery, tuple[list[Message], int]]):
     messages_repository: BaseMessagesRepository
 
-    async def handle(self, query: GetMessagesQuery) -> Iterable[Message]:
+    async def handle(self, query: GetMessagesQuery) -> tuple[list[Message], int]:
         return await _count_db_errors(
             'query', 'messages',
             lambda: self.messages_repository.get_messages(
@@ -101,10 +100,11 @@ class GetMessagesQueryHandler(BaseQueryHandler):
 
 
 @dataclass(frozen=True)
-class GetAllChatsQueryHandler(BaseQueryHandler[GetAllChatsQuery, Iterable[Chat]]):
+class GetAllChatsQueryHandler(BaseQueryHandler[GetAllChatsQuery, tuple[list[Chat], int]]):
     chats_repository: BaseChatsRepository
 
-    async def handle(self, query: GetAllChatsQuery) -> Iterable[Chat]:  # type: ignore
+    # Returns the (chats, total) tuple — the API handler unpacks both.
+    async def handle(self, query: GetAllChatsQuery) -> tuple[list[Chat], int]:
         return await _count_db_errors(
             'query', 'chats',
             lambda: self.chats_repository.get_all_chats(filters=query.filters),

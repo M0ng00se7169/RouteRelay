@@ -22,7 +22,7 @@ def _wrapped_client() -> tuple[TestClient, CircuitBreaker]:
 	return TestClient(app=app), container.resolve(CircuitBreaker)
 
 
-def test_open_breaker_returns_503_with_retry_after():
+def test_open_breaker_returns_503_with_retry_after() -> None:
 	client, breaker = _wrapped_client()
 
 	try:
@@ -44,7 +44,7 @@ def test_open_breaker_returns_503_with_retry_after():
 	assert resp.status_code == 200
 
 
-def test_closed_breaker_serves_requests_through_proxy():
+def test_closed_breaker_serves_requests_through_proxy() -> None:
 	client, breaker = _wrapped_client()
 	assert breaker.state == 'closed'
 

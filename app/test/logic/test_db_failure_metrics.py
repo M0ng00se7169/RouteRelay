@@ -7,12 +7,15 @@ labels are dynamic (``operation.{ExceptionClassName}``), so assertions use
 ``get_sample_value`` with the full label set and treat ``None`` as 0.
 """
 
+from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 import pytest
 from prometheus_client import REGISTRY
 
 from domain.entities.messages import Chat
+from domain.events.base import BaseEvent
 from domain.values.messages import Title
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.session import SessionProvider
@@ -26,8 +29,9 @@ from logic.commands.messages import (
     DeleteChatCommand,
     DeleteChatCommandHandler,
 )
+from logic.events.base import EventHandler
 from logic.exceptions.messages import ChatNotFoundException
-from logic.mediator.base import EventMediator
+from logic.mediator.event import EventMediator
 from logic.queries.messages import (
     GetChatDetailQuery,
     GetChatDetailQueryHandler,
@@ -47,56 +51,60 @@ def _db_error(operation: str, collection: str, exception: str) -> float:
 
 
 @dataclass
-class FakeMediator(EventMediator):
-    def __init__(self):
-        self.published = []
+class FakeMediator(EventMediator[BaseEvent, Any]):
+    def __init__(self) -> None:
+        self.published: list[BaseEvent] = []
 
-    def register_event(self, event, event_handlers):
+    def register_event(
+        self,
+        event: type[BaseEvent],
+        event_handlers: Iterable[EventHandler[BaseEvent, Any]] | None = None,
+    ) -> None:
         pass
 
-    async def publish(self, events):
+    async def publish(self, events: Iterable[BaseEvent]) -> list[Any]:
         self.published.extend(list(events))
         return []
 
 
 class NoopSessionProvider(SessionProvider):
-    async def __call__(self):
+    async def __call__(self) -> None:
         return None
 
 
 class FailingChatsRepository(MemoryChatRepository):
-    def __init__(self, failing_method: str):
+    def __init__(self, failing_method: str) -> None:
         super().__init__()
         self.failing_method = failing_method
 
-    def _fail(self):
+    def _fail(self) -> None:
         raise RuntimeError('mongo is down')
 
-    async def add_chat(self, chat, session=None):
+    async def add_chat(self, chat: Chat, session: Any | None = None) -> None:
         self._fail()
 
-    async def delete_chat_by_oid(self, chat_oid: str, session=None):
+    async def delete_chat_by_oid(self, chat_oid: str, session: Any | None = None) -> None:
         self._fail()
 
-    async def get_chat_by_oid(self, oid: str):
+    async def get_chat_by_oid(self, oid: str) -> Chat | None:
         if self.failing_method == 'get_chat_by_oid':
             self._fail()
         return await super().get_chat_by_oid(oid)
 
 
 class FailingOutboxRepository(MemoryOutboxRepository):
-    async def save_events(self, events, session=None) -> None:
+    async def save_events(self, events: list[BaseEvent], session: Any | None = None) -> None:
         raise RuntimeError('outbox write failed')
 
 
-def _chat_repo_with(title='room'):
+def _chat_repo_with(title: str = 'room') -> MemoryChatRepository:
     repo = MemoryChatRepository()
     repo._saved_chats.append(Chat.create_chat(title=Title(title)))
     return repo
 
 
 @pytest.mark.asyncio
-async def test_create_chat_counts_insert_failure_and_reraises():
+async def test_create_chat_counts_insert_failure_and_reraises() -> None:
     handler = CreateChatCommandHandler(
         _mediator=FakeMediator(),
         chats_repository=FailingChatsRepository('add_chat'),
@@ -113,7 +121,7 @@ async def test_create_chat_counts_insert_failure_and_reraises():
 
 
 @pytest.mark.asyncio
-async def test_outbox_write_failure_is_counted():
+async def test_outbox_write_failure_is_counted() -> None:
     mediator = FakeMediator()
     handler = CreateChatCommandHandler(
         _mediator=mediator,
@@ -133,7 +141,7 @@ async def test_outbox_write_failure_is_counted():
 
 
 @pytest.mark.asyncio
-async def test_delete_chat_counts_delete_failure_and_reraises():
+async def test_delete_chat_counts_delete_failure_and_reraises() -> None:
     repo = FailingChatsRepository('delete_chat_by_oid')
     repo._saved_chats.append(Chat.create_chat(title=Title('room')))
     chat = repo._saved_chats[0]
@@ -153,7 +161,7 @@ async def test_delete_chat_counts_delete_failure_and_reraises():
 
 
 @pytest.mark.asyncio
-async def test_query_counts_failure_and_reraises():
+async def test_query_counts_failure_and_reraises() -> None:
     handler = GetChatDetailQueryHandler(
         chats_repository=FailingChatsRepository('get_chat_by_oid'),
         messages_repository=MemoryMessagesRepository(),
@@ -168,7 +176,7 @@ async def test_query_counts_failure_and_reraises():
 
 
 @pytest.mark.asyncio
-async def test_domain_exception_is_not_counted_as_db_failure():
+async def test_domain_exception_is_not_counted_as_db_failure() -> None:
     # ChatNotFoundException is raised by the handler after a *successful*
     # repository call (chat simply absent) — it must not count as a DB error.
     handler = GetChatDetailQueryHandler(

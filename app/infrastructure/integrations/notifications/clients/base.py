@@ -14,5 +14,5 @@ class BaseNotificationClient(ABC):
         ...
 
     @abstractmethod
-    async def send(self, notification: Notification):
+    async def send(self, notification: Notification) -> None:
         ...

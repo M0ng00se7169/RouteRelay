@@ -15,21 +15,21 @@ from domain.values.messages import (
 )
 
 
-def test_create_message_success_short_text():
+def test_create_message_success_short_text() -> None:
     text = Text('hello world')
     message = Message(text=text, chat_oid=str(uuid4()))
     assert message.text == text
     assert message.created_at.date() == datetime.today().date()
 
 
-def test_create_message_success_long_text():
+def test_create_message_success_long_text() -> None:
     text = Text('a' * 400)
     message = Message(text=text, chat_oid=str(uuid4()))
     assert message.text == text
     assert message.created_at.date() == datetime.today().date()
 
 
-def test_create_chat_success():
+def test_create_chat_success() -> None:
     title = Title('title')
     chat = Chat(title=title)
     assert chat.title == title
@@ -37,12 +37,12 @@ def test_create_chat_success():
     assert chat.created_at.date() == datetime.today().date()
 
 
-def test_create_chat_title_too_long():
+def test_create_chat_title_too_long() -> None:
     with pytest.raises(TitleTooLongException):
         Title('title' * 200)
 
 
-def test_add_chat_to_message():
+def test_add_chat_to_message() -> None:
     text = Text('hello world')
     message = Message(text=text, chat_oid=str(uuid4()))
     title = Title('title')
@@ -51,7 +51,7 @@ def test_add_chat_to_message():
     assert message in chat.messages
 
 
-def test_new_message_events():
+def test_new_message_events() -> None:
     text = Text('hello world')
     message = Message(text=text, chat_oid=str(uuid4()))
     title = Title('title')

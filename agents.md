@@ -34,7 +34,7 @@ if it and an older doc disagree, trust it but re-verify line numbers.
 1. **Always use `read` before editing** — you have the file in context already, it won't be in the agent's context.
 2. **Edit instead of shell** — `edit_file` for modifications, `execute_command` only for non-edit tasks.
 3. **Non-interactive CLI** — use flags that avoid prompts (`--yes`, `--force`, `--no-audit`, etc.).
-4. **Test after code changes** — `cd app && poetry run pytest` or `poetry run uvicorn --factory application.api.main:create_app --reload`.
+4. **Test after code changes** — `cd app && uv run pytest` or `uv run uvicorn --factory application.api.main:create_app --reload`.
 
 ---
 
@@ -63,7 +63,7 @@ if it and an older doc disagree, trust it but re-verify line numbers.
   `kafka_consumer_up` stays 1 through reconnects, drops on stop/any task exit
 - ~~Outbox relay not circuit-breaker-guarded~~ **fixed 2026-09-25** (O-2): the relay now runs its
   sends through a private `'kafka'` breaker (`create_outbox_relay`); open breaker skips the batch
-- ~~`ruff` missing from the poetry env~~ **fixed 2026-09-25** (O-3): `poetry run ruff check <files>`
+- ~~`ruff` missing from the poetry env~~ **fixed 2026-09-25** (O-3): `uv run ruff check <files>`
   works now — run it on changed files as part of verification
 
 ---
@@ -72,4 +72,4 @@ if it and an older doc disagree, trust it but re-verify line numbers.
 
 - **How is the app wired?** → `read app/logic/init.py`
 - **How do I add a new handler?** → Follow `docs/cqrs-contract.md`, register in `init.py`, add test
-- **What's the test command?** → `cd app && poetry run pytest`
+- **What's the test command?** → `cd app && uv run pytest`

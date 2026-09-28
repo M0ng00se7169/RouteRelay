@@ -1,11 +1,12 @@
 name: CI
 
 # Quality gates for the kafka-chat backend. Mirrors the project's real
-# workflow: the pre-commit suite (pyupgrade, ruff, add-trailing-comma,
-# isort — the repo deliberately does NOT use `ruff format`), the pytest
-# suite (fully self-contained: in-memory repositories, no Mongo/Kafka
-# needed), config validation for the observability stack (promtool +
-# amtool), and a build check for the app image.
+# workflow: the pre-commit suite (pyupgrade, ruff, add-trailing-comma —
+# the repo deliberately does NOT use `ruff format`), a strict mypy type
+# check over the whole app package, the pytest suite (fully self-contained:
+# in-memory repositories, no Mongo/Kafka needed), config validation for
+# the observability stack (promtool + amtool), and a build check for the
+# app image.
 
 on:
   push:
@@ -33,7 +34,8 @@ jobs:
           python-version: '3.12'
 
       - name: Cache pre-commit environments
-        uses: actions/cache@v4
+        # v5 runs on Node 24 (v4 targets the deprecated Node 20).
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -52,26 +54,70 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install Poetry
-        # 2.3.0 = supports PEP 621 [project] AND PEP 735 [dependency-groups]
-        # (groups landed in 2.2.0; the lock-hash bug in them was fixed in 2.3.0)
-        run: pipx install poetry==2.3.0
-
-      - uses: actions/setup-python@v6
+      - name: Install uv
+        # Pin the exact uv version the uv.lock format was generated with
+        # (same pin as the Dockerfile's builder image). The action's cache
+        # covers both the uv binary and the downloaded wheels/interpreters.
+        # cache-suffix is per-job: tests and typecheck share one uv.lock, and
+        # identical cache keys race — the losing job fails its cache save.
+        uses: astral-sh/setup-uv@v10.2.0
         with:
-          python-version: '3.12'
-          cache: poetry
+          version: '0.12.19'
+          enable-cache: true
+          cache-suffix: tests
+
+      # No actions/setup-python here on purpose: uv reads .python-version
+      # (3.12) and provisions the interpreter itself — same source of truth
+      # as local dev and the Docker build.
 
       - name: Install dependencies (incl. dev group)
-        # package-mode=false (PEP 621 pyproject): poetry install manages the
-        # env only, there is no project package to skip.
-        run: poetry install --no-interaction
+        # --frozen: CI must install the lockfile, never re-resolve. The
+        # application repo has no [build-system], so there is no project
+        # package to install — uv sync manages dependencies only.
+        run: uv sync --frozen
 
       # The suite spins up in-memory repositories (app/test/fixtures.py) —
       # no MongoDB, Kafka or any other service required.
       - name: Run pytest
         working-directory: app
-        run: poetry run pytest -q
+        run: uv run --frozen pytest -q
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        # Same pin as the tests job and the Dockerfile builder: one uv version
+        # everywhere, and --frozen installs exactly the locked mypy. Distinct
+        # cache-suffix per job — see the tests job comment.
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: '0.12.19'
+          enable-cache: true
+          cache-suffix: typecheck
+
+      - name: Install dependencies (incl. dev group)
+        run: uv sync --frozen
+
+      - name: Cache mypy incremental state
+        # Rolling cache (mypy docs pattern): key is unique per run so a fresh
+        # snapshot is always saved; restore-keys picks the latest previous one
+        # and mypy re-checks only what changed since it. v5 runs on Node 24
+        # (v4 targets the deprecated Node 20).
+        uses: actions/cache@v5
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            mypy-${{ runner.os }}-
+
+      # NO working-directory here on purpose: [tool.mypy].files = ["app"] is
+      # resolved relative to the repo root (pytest's app/-relative run is the
+      # exception, not the rule).
+      - name: Run mypy (strict)
+        run: uv run --frozen mypy
 
   configs:
     name: Observability configs (promtool + amtool)

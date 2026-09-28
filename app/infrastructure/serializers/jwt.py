@@ -42,7 +42,7 @@ def _sign(signing_input: str) -> bytes:
     return hmac.new(secret, signing_input.encode(), hashlib.sha256).digest()
 
 
-def encode_token(payload: dict) -> str:
+def encode_token(payload: dict[str, Any]) -> str:
     """Sign an arbitrary claims payload and return the encoded JWT string."""
     header = {"alg": "HS256", "typ": "JWT"}
     header_str = _base64url_encode(header)
@@ -52,7 +52,7 @@ def encode_token(payload: dict) -> str:
     return f"{signing_input}.{signature_str}"
 
 
-def create_token(subject: str, claims: dict | None = None) -> str:
+def create_token(subject: str, claims: dict[str, Any] | None = None) -> str:
     """Create a signed JWT token.
 
     Args:
@@ -103,4 +103,9 @@ def verify_token(token: str) -> str:
     if exp is not None and exp < int(time.time()):
         raise ValueError("Token expired")
 
-    return payload["sub"]
+    subject = payload["sub"]
+    # ValueError (not TypeError): the caller-facing contract for a bad token is
+    # one exception type, and the app maps ValueError -> HTTP 401.
+    if not isinstance(subject, str):
+        raise ValueError("Token 'sub' claim is not a string")  # noqa: TRY004
+    return subject

@@ -5,14 +5,14 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-27** · Tests: **217 passed, 0 warnings** (`cd app && poetry run pytest`, ~4s) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest, promtool/amtool, docker build)
+> Last updated: **2026-09-28** · Tests: **217 passed, 0 warnings** (`cd app && uv run pytest`, ~6s) · mypy: **FULL STRICT clean, 121 files** (`uv run mypy` from repo root — files=["app"] is root-relative) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest via uv, promtool/amtool, docker build) — mypy not in CI yet (user decision pending)
 
 ---
 
 ## 1. What this project is
 
 FastAPI + Kafka + MongoDB multi-user chat backend demonstrating DDD, CQRS, and event-driven
-architecture. One demo user (OAuth2 password flow, JWT). Python 3.11+, Poetry, pytest.
+architecture. One demo user (OAuth2 password flow, JWT). Python 3.12 (`.python-version`), uv, pytest.
 Details: `docs/architecture.md`, `CLAUDE.md`.
 
 ---
@@ -74,12 +74,98 @@ Key wiring facts:
   (see `docs/cqrs-contract.md`).
 - **Formatting:** ruff line-length 100, single quotes, **tabs** in some files / **4 spaces** in
   others — match the file you are editing, do not reformat.
-- **After code changes:** `cd app && poetry run pytest` (all 211 must stay green).
+- **After code changes:** `cd app && uv run pytest` (all 217 must stay green).
 
 ---
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-28 — mypy wired into CI + as a CD deploy gate.** `.github/workflows/ci.yml`: new
+  `typecheck` job (name `Type check (mypy)`) — same uv pattern as tests (setup-uv@v10.2.0 pinned
+  0.12.19, `uv sync --frozen` so CI runs exactly the locked mypy 1.20.2), plus a rolling
+  `.mypy_cache` cache (actions/cache@v4, key `mypy-<os>-<run_id>`, restore-keys prefix — the mypy
+  docs recipe). Runs from the REPO ROOT (no working-directory): `[tool.mypy].files=["app"]` is
+  resolved relative to pyproject.toml. CI is now 5 jobs: lint, tests, typecheck, configs,
+  docker-build. `.github/workflows/cd.yml`: a second `wait-on-check-action` gate for
+  `Type check (mypy)` alongside `Tests (pytest)` — check-name must match the job NAME exactly.
+  README CI/CD story synced (5 jobs, both gates). Committed separately from the strict migration
+  (already landed as 6e7180a). YAML structure validated via yaml.safe_load; pre-commit hooks skip
+  YAML (pyupgrade/ruff file filters).
+- **2026-09-28 — mypy switched to FULL `strict = true` (local-only, all 509 initial errors fixed at the root).**
+  pyproject `[tool.mypy]`: `strict = true` + `disallow_any_generics`/`disallow_subclassing_any`/
+  `disallow_any_unimported` (user decision: NO test overrides — tests fully annotated too). 509
+  errors in 59 files → 0. Key fixes: **motor generics parameterized** `AgnosticClient[AgnosticCollection][dict[str, Any]]`,
+  `AsyncIOMotorClient[dict[str, Any]]` (motor ships .pyi stubs, is Generic); **aiokafka has no stubs** →
+  `disallow_any_unimported` forbids its names in annotations, so `KafkaMessageBroker.producer/consumer`
+  are typed `Any` at that single boundary (comment explains); **kafka.stop_consuming made SYNC** `-> None`
+  (was `async def` — never matched the ABC; 2 tests updated to plain calls); `breaker.call()` generic
+  over `_T` (kills the proxies' Any-returns); breaker proxies' `inner` typed as the repo ABCs (not Any);
+  repo `session=None` params typed (`SessionHint=Any` in messages/base.py, real
+  `AsyncIOMotorClientSession` in mongo repos); `EventMediator` imported from `logic.mediator.event`,
+  `NewMessageReceivedFromBrokerEvent` from `domain.events.messages` (strict no_implicit_reexport);
+  `BaseCommand`/`CommandHandler._mediator` typed `EventMediator[BaseEvent, Any]`; `lifespan` ->
+  `AsyncIterator[None]`, tasks `asyncio.Task[None]`; `encode_token/create_token` -> `dict[str, Any]`,
+  `verify_token` runtime-checks `sub` is str; `PrometheusFastApiInstrumentator` imported from
+  `.instrumentation` (same re-export issue). Test files: fake containers/streams annotated, async
+  generators fixed to sync-def-returning-iterator pattern (mypy async-iterator guidance), duck-typed
+  repo stubs bridged with `cast()` + one `# type: ignore[attr-defined]`/`[call-overload]` each for
+  punq `_singletons` internals and module patching (noqa B010 where setattr). GOTCHAS: (1) `uv run
+  mypy` must run from REPO ROOT (files=["app"]); (2) str_replace with old strings spanning a
+  line-boundary comment can swallow a newline — always re-read edited hunks; (3) ruff RUF100 moved
+  noqa TRY004 must sit on the `raise` line, not the `if`. Verified: mypy clean (121 files), 217
+  passed, ruff clean on all 60 changed files, `uv lock --check` fresh, `create_app()` boots.
+- **2026-09-28 — Migration Poetry → uv (local + Dockerfile + CI).** pyproject: `[tool.poetry]`
+  package-mode block dropped; NO `[build-system]` (application repo — `uv sync` manages deps only);
+  `.python-version` = `3.12` added (the single pin uv reads everywhere). `uv.lock` (74 pkgs)
+  replaces `poetry.lock` (deleted); `.venv/` gitignored. Verified locally: 217 passed, mypy clean
+  (121 files), ruff clean, `uv lock --check` fresh (local uv 0.12.7; cross-checked with pinned
+  0.12.19). **Dockerfile rewritten** to the uv pattern: builder
+  `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` runs `uv lock --check`, then builds `/opt/venv`
+  (prod, `--no-dev`) and `/opt/venv-dev` (`--all-groups`) with `UV_COMPILE_BYTECODE=1` + BuildKit
+  cache mounts. **Stages reordered: prod is LAST** — compose and docker/build-push-action build the
+  final stage by default, and the old file ended on dev, so CI/GHCR were actually shipping the DEV
+  image; prod is now non-root (`appuser`) with a bare-run CMD. Venvs live OUTSIDE `/app` on purpose:
+  dev compose bind-mounts `../app/` over `/app` and would hide a venv inside the workdir; dev stage
+  is selected via new `target: dev` in `docker_compose/app.yaml`. **CI tests job**: setup-uv@v10.2.0
+  (version 0.12.19, enable-cache) + `uv sync --frozen` + `uv run --frozen pytest -q`; its
+  actions/setup-python was removed (uv provisions 3.12 from `.python-version` — same source as
+  Docker/local). Lint job unchanged; cd.yml untouched (builds the Dockerfile, no pkg manager).
+  Docker build + smoke test VERIFIED locally (2026-09-28, daemon up): both targets built, uv boot
+  + /api/docs + /metrics 200 in dev AND prod (prod via the image's own CMD, non-root, against
+  real mongo/kafka on the compose `backend` network); `uv lock --check` also cross-checked inside
+  the exact builder image (uv 0.12.19/CPython 3.12.12). **COPY gotcha hit live:** the old
+  `COPY /app/ /app/**` copied app/'s CHILDREN into /app — the natural rewrite `COPY ./app ./app`
+  nests code at /app/app/ and flat imports break; correct form is `COPY ./app/ ./`. Windows Git
+  Bash gotcha: `docker run -v /src` gets mangled to C:/Program Files/Git/src — use
+  `MSYS_NO_PATHCONV=1` + `$(pwd -W)`. Docs switched to `uv run`: README, local-development,
+  user-guide, architecture, agents.md; historical ADR/plan
+  docs left as-is. Gotchas: (1) uv defaults to the newest interpreter — without `.python-version`
+  it picked local 3.14; (2) keep generated files ASCII — em-dashes broke two write attempts.
+- **2026-09-28 — mypy added (pragmatic baseline, LOCAL-ONLY enforcement).** Dev dep `mypy@^1.18.2`
+  (resolved 1.20.2) + `[tool.mypy]` in pyproject: pydantic plugin, `check_untyped_defs`,
+  `no_implicit_optional`, `warn_unused_ignores/configs`, `files=["app"]`; `ignore_missing_imports`
+  overrides for punq/aiokafka (no stubs). Deliberately NOT in pre-commit/CI yet (user decision —
+  revisit when tightening). First run 103 errors in 27 files → **0 fixed at the root** (only
+  deliberate-ABC tests carry `type: ignore[abstract]`). Key structural fixes: mediator made generic
+  (`EventMediator[ET, ER]` / `QueryMediator` / `CommandMediator`; maps are class-keyed
+  `dict[type[...], list[...]]`; concrete `Mediator` parameterized `[Base*, Any]` with `Any`-valued
+  handler lists — invariance); command/query DTOs inherit plain (non-dataclass) marker classes
+  `BaseCommand`/`BaseQuery` (they could NOT inherit the old frozen dataclasses — TypeError);
+  concrete handlers parameterized (`CommandHandler[Cmd, Result]`, `BaseQueryHandler[Q, R]`,
+  `EventHandler[E, Any]`); repo bases aligned to implementations (`get_all_chats(filters) ->
+  tuple[list[Chat], int]`, infra owns its filters — the old base imported the API pydantic ones);
+  motor `_collection`/outbox `collection` typed `AgnosticCollection`; broker ABC
+  `start_consuming`/`stop_consuming` now SYNC returning `AsyncIterator[dict]` (matches every
+  impl and the consumer loop); breaker proxies subclass the repo bases; `Chat.__eq__(object)`
+  LSP fix; relay send wrapped in typed closure `_send_operation(row)`. Dead code deleted:
+  duplicated query classes + `GetMessagesQueryHandler` in logic/commands/messages.py (called a
+  nonexistent repo method) and `MemoryChatRepository.find_chats_by_user_id` (read a nonexistent
+  `chat.user_id`). GOTCHAS: (1) PEP 696 `default=` TypeVars type-check under mypy but **raise
+  TypeError on Python ≤3.12** — do not use until the floor is 3.13; (2) `GetAllChatsQueryHandler`'s
+  old `# type: ignore` hid that it returns the (chats, count) TUPLE the API unpacks — annotation
+  now honest; (3) lock regenerated via the Poetry 2.3.0 throwaway venv (`/tmp/p230`, Windows:
+  `Scripts/` not `bin/`); local 2.1.3 still fine for `poetry run`. Verified: mypy clean, ruff
+  clean on all changed files, 217 passed, `poetry check` clean, plain `poetry run mypy` works.
 - **2026-09-27 — All dependencies bumped to latest.** pyproject constraints + lock regenerated
   (throwaway Poetry 2.3.0 venv; the 1.8.2 rule is obsolete, 2.1.3 can't do PEP 735 locks).
   Notables: fastapi 0.115→0.141 (starlette 0.40→**1.7**), aiokafka 0.10→0.14, punq 0.7→0.9,
@@ -294,6 +380,21 @@ Key wiring facts:
 index of the formerly-listed issues. **No open issues remain:** all 8 legacy entries plus O-1
 (Kafka consumer reconnect + heartbeat), O-2 (relay `'kafka'` breaker) and O-3 (ruff in poetry env)
 are verified fixed as of 2026-09-25.
+
+- **2026-09-28 — fresh-clone drill fixed `init-mongo` (was broken for FIRST-TIME users).**
+  Simulated a fresh `git clone` (repo copied to /tmp minus local junk, `.env.example` → `.env`)
+  and ran the README flow. The uv-migrated Dockerfile/compose worked, but `storages.yaml`'s
+  init-mongo died with `syntax error near unexpected token '&&'` (nested YAML/bash quoting) —
+  pre-existing, invisible locally because the old `docker_compose_dbdata6` volume was already
+  initiated. On a truly fresh volume the replica set never came up → transactions/outbox dead.
+  Fixed with list-form command + block scalar, idempotent (skips when `rs.status().ok == 1`).
+  Verified BOTH paths on a throwaway compose project (`-p frest` → fresh volume): fresh volume
+  initiates + PRIMARY + transaction roundtrip; already-initiated volume skips cleanly (exit 0).
+  Also demystified: aiokafka `GroupCoordinatorNotAvailableError` spam on cold boot is benign
+  (auto-create lag; settles in ~1 min, `kafka_consumer_up 1`, topic `new-messages` created),
+  and OpenAPI JSON lives at `/openapi.json` (only docs_url is under `/api`). Compose project
+  name comes from the FIRST `-f` file's dir — both copies get `docker_compose`, so volumes are
+  shared across checkouts (use `-p` to isolate).
 
 ---
 

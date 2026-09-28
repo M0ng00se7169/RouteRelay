@@ -15,7 +15,7 @@ enforces `CLAUDE.md` ("Tests use in-memory repos") as a concrete rule. Operation
 1. **Run pytest from inside `app/`.** The flat first-party imports (`application`, `domain`,
    `infrastructure`, `logic`, `settings`, `test`) only resolve when `app/` is on `sys.path`.
    ```bash
-   cd app && poetry run pytest
+   cd app && uv run pytest
    ```
 
 2. **Use the in-memory container.** Test API clients must apply the swap from

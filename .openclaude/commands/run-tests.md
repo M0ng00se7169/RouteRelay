@@ -10,13 +10,13 @@ Kafka is needed — but pytest **must** run with `app/` on the path so the flat 
 
 ## Command
 ```bash
-cd app && poetry run pytest
+cd app && uv run pytest
 ```
-If Poetry isn't available in the shell, fall back to `cd app && pytest`.
+If uv isn't available in the shell, fall back to the project `.venv`: `.venv/Scripts/activate` (Windows) or `.venv/bin/activate`, then `cd app && pytest`.
 
 ## What to do
 1. Run the command above.
-2. If the user passed a path or `-k` filter, append it (e.g. `cd app && poetry run pytest -k messages`).
+2. If the user passed a path or `-k` filter, append it (e.g. `cd app && uv run pytest -k messages`).
 3. Summarize the result: count of passed/failed/skipped, and for each failure the file and the
    assertion/error.
 4. If failures are import errors (`ModuleNotFoundError` for `application`/`logic`/...), the cause is
