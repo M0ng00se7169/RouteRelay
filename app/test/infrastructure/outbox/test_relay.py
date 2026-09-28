@@ -1,7 +1,9 @@
+from collections.abc import AsyncIterator
 from datetime import (
 	UTC,
 	datetime,
 )
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -60,9 +62,9 @@ def _make_row(topic: str = 'chat-events', sent: bool = False) -> OutboxRow:
 class FakeBroker(BaseMessageBroker):
 	def __init__(self, fail: bool = False) -> None:
 		self.fail = fail
-		self.sent: list[tuple] = []
+		self.sent: list[tuple[str, bytes, bytes]] = []
 
-	async def send_message(self, key: bytes, topic: str, value: bytes) -> None:
+	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
 		if self.fail:
 			raise RuntimeError('kafka down')
 		self.sent.append((topic, key, value))
@@ -73,10 +75,10 @@ class FakeBroker(BaseMessageBroker):
 	async def close(self) -> None:
 		...
 
-	async def start_consuming(self, topic: str):
-		...
+	def start_consuming(self, topic: str) -> AsyncIterator[dict[str, Any]]:
+		raise NotImplementedError
 
-	async def stop_consuming(self) -> None:
+	def stop_consuming(self) -> None:
 		...
 
 
@@ -96,7 +98,7 @@ def _build_relay(
 
 @pytest.fixture
 def metric_baselines():
-	baselines = {name: _value(name) for name in METRIC_NAMES}
+	baselines: dict[str, Any] = {name: _value(name) for name in METRIC_NAMES}
 	baselines['kafka_messages_sent_total'] = {
 		topic: _kafka_sent_value(topic) for topic in KAFKA_SENT_TOPICS
 	}
@@ -303,11 +305,14 @@ async def test_relay_trips_mid_batch_and_skips_next_tick_without_histogram_sampl
 	repo._outbox.extend([_make_row() for _ in range(3)])
 
 	class FailOnSecondSendBroker(FakeBroker):
-		async def send_message(self, key: bytes, topic: str, value: bytes) -> None:
+		breaker: CircuitBreaker | None = None
+
+		async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
 			if len(self.sent) >= 1:  # row 2: Kafka goes down
+				assert self.breaker is not None
 				self.breaker._open()
 				raise RuntimeError('kafka down mid-batch')
-			await super().send_message(key, topic, value)
+			await super().send_message(topic, key, value)
 
 	breaker = CircuitBreaker(name='relay-test-race', failure_threshold=1, recovery_time=60)
 	broker = FailOnSecondSendBroker()

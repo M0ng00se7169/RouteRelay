@@ -52,13 +52,12 @@ def telegram_container():
     # Rewire just the ListenerAddedEvent handler to the spy so the full
     # command -> event -> notification flow can be observed.
     mediator: Mediator = container.resolve(Mediator)
-    mediator.events_map[ListenerAddedEvent] = [
-        ListenerAddedEventHandler(
-            message_broker=container.resolve(BaseMessageBroker),
-            connection_manager=container.resolve(BaseConnectionManager),
-            notification_client=spy,
-        ),
-    ]
+    handler = ListenerAddedEventHandler(
+        message_broker=container.resolve(BaseMessageBroker),
+        connection_manager=container.resolve(BaseConnectionManager),
+        notification_client=spy,
+    )
+    mediator.events_map[ListenerAddedEvent] = [handler]
 
     return container, spy
 
@@ -125,12 +124,13 @@ async def test_add_telegram_listener_command_publishes_event_and_notifies(telegr
     container, spy = telegram_container
     mediator: Mediator = container.resolve(Mediator)
 
-    chat, *_ = await mediator.handle_command(CreateChatCommand(title='telegram-test-chat'))
+    chat = await mediator.handle_command(CreateChatCommand(title='telegram-test-chat'))
     spy.sent.clear()  # discard any notifications from chat creation
 
     sent_before = _counter('telegram_notifications_sent_total')
+    created_chat = chat[0]
     listener, *_ = await mediator.handle_command(
-        AddTelegramListenerCommand(chat_oid=chat.oid, telegram_chat_id='12345'),
+        AddTelegramListenerCommand(chat_oid=created_chat.oid, telegram_chat_id='12345'),
     )
 
     assert listener.oid == '12345'

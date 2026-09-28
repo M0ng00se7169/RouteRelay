@@ -5,11 +5,14 @@ from abc import (
 from collections.abc import Iterable
 from dataclasses import dataclass
 
-from application.api.messages.filters import GetMessagesFilters
 from domain.entities.messages import (
     Chat,
     ChatListener,
     Message,
+)
+from infrastructure.repositories.filters.messages import (
+    GetAllChatsFilters,
+    GetMessagesFilters,
 )
 
 
@@ -29,7 +32,7 @@ class BaseChatsRepository(ABC):
         ...
 
     @abstractmethod
-    async def get_all_chats(self, limit: int, offset: int) -> Iterable[Chat]:
+    async def get_all_chats(self, filters: GetAllChatsFilters) -> tuple[list[Chat], int]:
         ...
 
     @abstractmethod
@@ -37,7 +40,7 @@ class BaseChatsRepository(ABC):
         ...
 
     @abstractmethod
-    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str, session=None):
+    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str, session=None) -> None:
         ...
 
     @abstractmethod
@@ -53,5 +56,5 @@ class BaseMessagesRepository(ABC):
         ...
 
     @abstractmethod
-    async def get_messages(self, chat_oid: str, filters: GetMessagesFilters) -> tuple[Iterable[Message], int]:
+    async def get_messages(self, chat_oid: str, filters: GetMessagesFilters) -> tuple[list[Message], int]:
         ...

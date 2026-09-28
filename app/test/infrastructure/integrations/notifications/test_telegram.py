@@ -51,4 +51,4 @@ async def test_send_calls_telegram_api():
 @pytest.mark.asyncio
 async def test_base_client_is_abstract():
     with pytest.raises(TypeError):
-        BaseNotificationClient()
+        BaseNotificationClient()  # type: ignore[abstract]

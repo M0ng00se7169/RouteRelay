@@ -100,7 +100,7 @@ async def test_disconnect_all_closes_and_notifies(manager):
 
 def test_base_manager_is_abstract():
     with pytest.raises(TypeError):
-        BaseConnectionManager()
+        BaseConnectionManager()  # type: ignore[abstract]
 
 
 # --- WS metrics (ADR-0006, Chunk 4.1) ---------------------------------------

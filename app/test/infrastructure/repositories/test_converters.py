@@ -18,14 +18,16 @@ from infrastructure.repositories.messages.converters import (
 
 
 def test_message_entity_to_document():
-    message = Message(oid='m1', chat_oid='c1', text=Text('hi'), created_at='t')
+    message = Message(oid='m1', chat_oid='c1', text=Text('hi'), created_at=datetime(2024, 1, 1))
     doc = convert_message_entity_to_document(message)
 
-    assert doc == {'oid': 'm1', 'text': 'hi', 'created_at': 't', 'chat_oid': 'c1'}
+    assert doc == {'oid': 'm1', 'text': 'hi', 'created_at': datetime(2024, 1, 1), 'chat_oid': 'c1'}
 
 
 def test_message_document_to_entity():
-    entity = convert_message_document_to_entity({'oid': 'm1', 'text': 'hi', 'created_at': 't', 'chat_oid': 'c1'})
+    entity = convert_message_document_to_entity(
+        {'oid': 'm1', 'text': 'hi', 'created_at': datetime(2024, 1, 1), 'chat_oid': 'c1'},
+    )
 
     assert entity.oid == 'm1'
     assert entity.text.as_generic_type() == 'hi'

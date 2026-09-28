@@ -72,7 +72,7 @@ async def start_relay(app: FastAPI | None = None) -> asyncio.Task:
     return asyncio.create_task(relay.run(), name='outbox-relay')
 
 
-async def stop_relay(task: asyncio.Task) -> None:
+async def stop_relay(task: asyncio.Task | None) -> None:
     if task is None:
         return
     task.cancel()
@@ -85,7 +85,7 @@ async def stop_relay(task: asyncio.Task) -> None:
 async def _kafka_consumer_loop(
 	broker: BaseMessageBroker,
 	topic: str,
-	mediator,
+	mediator: Mediator,
 	backoff_initial: float = 1.0,
 	backoff_max: float = 30.0,
 ) -> None:

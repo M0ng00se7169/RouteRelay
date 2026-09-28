@@ -19,15 +19,17 @@ generic ``__getattr__`` proxy so every guarded call site stays greppable.
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import monotonic
-from typing import (
-    Any,
-)
+from typing import Any
 
 from infrastructure.metrics import (
     circuit_breaker_rejected_total,
     circuit_breaker_state,
     safe_inc,
     safe_set,
+)
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
 )
 
 
@@ -135,7 +137,7 @@ class CircuitBreaker:
 
 
 @dataclass
-class CircuitBreakerChatsRepository:
+class CircuitBreakerChatsRepository(BaseChatsRepository):
     """Chats repository proxy failing fast when the shared breaker is open."""
 
     inner: Any
@@ -182,7 +184,7 @@ class CircuitBreakerChatsRepository:
 
 
 @dataclass
-class CircuitBreakerMessagesRepository:
+class CircuitBreakerMessagesRepository(BaseMessagesRepository):
     """Messages repository proxy failing fast when the shared breaker is open."""
 
     inner: Any

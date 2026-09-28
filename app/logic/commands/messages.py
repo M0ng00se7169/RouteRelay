@@ -1,9 +1,7 @@
-from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
+from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import (
-    TypeVar,
-)
+from typing import TypeVar
 
 from domain.entities.messages import (
     Chat,
@@ -24,6 +22,7 @@ from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
     BaseMessagesRepository,
 )
+from logic.commands.base import BaseCommand, CommandHandler
 from logic.exceptions.messages import (
     ChatNotFoundException,
     ChatWithThatTitleAlreadyExistsException,
@@ -67,12 +66,12 @@ async def _maybe_transaction(
 
 
 @dataclass
-class CreateChatCommand:
+class CreateChatCommand(BaseCommand):
     title: str
 
 
 @dataclass
-class CreateChatCommandHandler:
+class CreateChatCommandHandler(CommandHandler[CreateChatCommand, Chat]):
     _mediator: EventMediator
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
@@ -98,26 +97,13 @@ class CreateChatCommandHandler:
 
 
 @dataclass
-class GetChatDetailQuery:
-    chat_oid: str
-
-
-@dataclass
-class GetChatDetailQueryHandler:
-    chats_repository: BaseChatsRepository
-
-    async def handle(self, query: GetChatDetailQuery) -> Chat:
-        return await self.chats_repository.get_chat_by_oid(query.chat_oid)
-
-
-@dataclass
-class CreateMessageCommand:
+class CreateMessageCommand(BaseCommand):
     chat_oid: str
     text: str
 
 
 @dataclass
-class CreateMessageCommandHandler:
+class CreateMessageCommandHandler(CommandHandler[CreateMessageCommand, Message]):
     _mediator: EventMediator
     messages_repository: BaseMessagesRepository
     chats_repository: BaseChatsRepository
@@ -125,7 +111,7 @@ class CreateMessageCommandHandler:
     session_provider: SessionProvider
 
     async def handle(self, command: CreateMessageCommand) -> Message:
-        chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
+        chat: Chat | None = await self.chats_repository.get_chat_by_oid(command.chat_oid)
 
         if not chat:
             raise ChatNotFoundException(chat_oid=command.chat_oid)
@@ -150,19 +136,19 @@ class CreateMessageCommandHandler:
 
 
 @dataclass
-class DeleteChatCommand:
+class DeleteChatCommand(BaseCommand):
     chat_oid: str
 
 
 @dataclass
-class DeleteChatCommandHandler:
+class DeleteChatCommandHandler(CommandHandler[DeleteChatCommand, None]):
     _mediator: EventMediator
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider
 
     async def handle(self, command: DeleteChatCommand) -> None:
-        chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
+        chat: Chat | None = await self.chats_repository.get_chat_by_oid(command.chat_oid)
 
         if not chat:
             raise ChatNotFoundException(chat_oid=command.chat_oid)
@@ -182,50 +168,20 @@ class DeleteChatCommandHandler:
 
 
 @dataclass
-class GetAllChatsListenersQuery:
-    chat_oid: str
-
-
-@dataclass
-class GetAllChatsListenersQueryHandler:
-    chats_repository: BaseChatsRepository
-
-    async def handle(self, query: GetAllChatsListenersQuery) -> Sequence[ChatListener]:
-        return await self.chats_repository.get_all_chat_listeners(query.chat_oid)
-
-
-@dataclass
-class GetMessagesQuery:
-    chat_oid: str
-    limit: int = 50
-    offset: int = 0
-
-
-@dataclass
-class GetMessagesQueryHandler:
-    messages_repository: BaseMessagesRepository
-
-    async def handle(self, query: GetMessagesQuery) -> Sequence[Message]:
-        return await self.messages_repository.get_messages_by_chat_oid(
-            chat_oid=query.chat_oid, limit=query.limit, offset=query.offset,
-        )
-
-
-@dataclass
-class AddTelegramListenerCommand:
+class AddTelegramListenerCommand(BaseCommand):
     chat_oid: str
     telegram_chat_id: str
 
 
 @dataclass
-class AddTelegramListenerCommandHandler:
+class AddTelegramListenerCommandHandler(CommandHandler[AddTelegramListenerCommand, ChatListener]):
     _mediator: EventMediator
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider
 
     async def handle(self, command: AddTelegramListenerCommand) -> ChatListener:
-        chat: Chat = await self.chats_repository.get_chat_by_oid(command.chat_oid)
+        chat: Chat | None = await self.chats_repository.get_chat_by_oid(command.chat_oid)
 
         if not chat:
             raise ChatNotFoundException(chat_oid=command.chat_oid)

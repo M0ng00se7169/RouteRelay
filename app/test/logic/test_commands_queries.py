@@ -40,10 +40,10 @@ from logic.queries.messages import (
 
 
 class FakeMediator(EventMediator):
-    def __init__(self):
-        self.published = []
+    def __init__(self) -> None:
+        self.published: list[object] = []
 
-    def register_event(self, event):
+    def register_event(self, event, event_handlers=None) -> None:
         pass
 
     async def publish(self, events):
@@ -260,12 +260,16 @@ async def test_maybe_transaction_starts_transaction_when_session_returned():
         async def __aexit__(self, *a):
             return False
 
-    async def provider():
-        return FakeSession()
+    class FakeSessionProvider(SessionProvider):
+        def __init__(self, session: FakeSession) -> None:
+            self._session = session
+
+        async def __call__(self):
+            return self._session
 
     from logic.commands.messages import _maybe_transaction
 
-    async with _maybe_transaction(provider) as session:
+    async with _maybe_transaction(FakeSessionProvider(FakeSession())) as session:
         assert session is not None
 
 

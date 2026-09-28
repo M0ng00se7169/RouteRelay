@@ -5,7 +5,7 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-27** · Tests: **217 passed, 0 warnings** (`cd app && poetry run pytest`, ~4s) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest, promtool/amtool, docker build)
+> Last updated: **2026-09-28** · Tests: **217 passed, 0 warnings** (`cd app && poetry run pytest`, ~6s) · mypy: **clean, 121 files** (`poetry run mypy`) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest, promtool/amtool, docker build)
 
 ---
 
@@ -80,6 +80,31 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-28 — mypy added (pragmatic baseline, LOCAL-ONLY enforcement).** Dev dep `mypy@^1.18.2`
+  (resolved 1.20.2) + `[tool.mypy]` in pyproject: pydantic plugin, `check_untyped_defs`,
+  `no_implicit_optional`, `warn_unused_ignores/configs`, `files=["app"]`; `ignore_missing_imports`
+  overrides for punq/aiokafka (no stubs). Deliberately NOT in pre-commit/CI yet (user decision —
+  revisit when tightening). First run 103 errors in 27 files → **0 fixed at the root** (only
+  deliberate-ABC tests carry `type: ignore[abstract]`). Key structural fixes: mediator made generic
+  (`EventMediator[ET, ER]` / `QueryMediator` / `CommandMediator`; maps are class-keyed
+  `dict[type[...], list[...]]`; concrete `Mediator` parameterized `[Base*, Any]` with `Any`-valued
+  handler lists — invariance); command/query DTOs inherit plain (non-dataclass) marker classes
+  `BaseCommand`/`BaseQuery` (they could NOT inherit the old frozen dataclasses — TypeError);
+  concrete handlers parameterized (`CommandHandler[Cmd, Result]`, `BaseQueryHandler[Q, R]`,
+  `EventHandler[E, Any]`); repo bases aligned to implementations (`get_all_chats(filters) ->
+  tuple[list[Chat], int]`, infra owns its filters — the old base imported the API pydantic ones);
+  motor `_collection`/outbox `collection` typed `AgnosticCollection`; broker ABC
+  `start_consuming`/`stop_consuming` now SYNC returning `AsyncIterator[dict]` (matches every
+  impl and the consumer loop); breaker proxies subclass the repo bases; `Chat.__eq__(object)`
+  LSP fix; relay send wrapped in typed closure `_send_operation(row)`. Dead code deleted:
+  duplicated query classes + `GetMessagesQueryHandler` in logic/commands/messages.py (called a
+  nonexistent repo method) and `MemoryChatRepository.find_chats_by_user_id` (read a nonexistent
+  `chat.user_id`). GOTCHAS: (1) PEP 696 `default=` TypeVars type-check under mypy but **raise
+  TypeError on Python ≤3.12** — do not use until the floor is 3.13; (2) `GetAllChatsQueryHandler`'s
+  old `# type: ignore` hid that it returns the (chats, count) TUPLE the API unpacks — annotation
+  now honest; (3) lock regenerated via the Poetry 2.3.0 throwaway venv (`/tmp/p230`, Windows:
+  `Scripts/` not `bin/`); local 2.1.3 still fine for `poetry run`. Verified: mypy clean, ruff
+  clean on all changed files, 217 passed, `poetry check` clean, plain `poetry run mypy` works.
 - **2026-09-27 — All dependencies bumped to latest.** pyproject constraints + lock regenerated
   (throwaway Poetry 2.3.0 venv; the 1.8.2 rule is obsolete, 2.1.3 can't do PEP 735 locks).
   Notables: fastapi 0.115→0.141 (starlette 0.40→**1.7**), aiokafka 0.10→0.14, punq 0.7→0.9,

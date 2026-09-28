@@ -3,13 +3,15 @@ from dataclasses import (
     field,
 )
 
-from application.api.messages.filters import GetMessagesFilters
 from domain.entities.messages import (
     Chat,
     ChatListener,
     Message,
 )
-from infrastructure.repositories.filters.messages import GetAllChatsFilters
+from infrastructure.repositories.filters.messages import (
+    GetAllChatsFilters,
+    GetMessagesFilters,
+)
 from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
     BaseMessagesRepository,
@@ -64,9 +66,6 @@ class MemoryChatRepository(BaseChatsRepository):
         if chat is None:
             return []
         return list(chat.listeners)
-
-    async def find_chats_by_user_id(self, user_id: str) -> list[Chat]:
-        return [chat for chat in self._saved_chats if chat.user_id == user_id]
 
     async def get_chat_by_title(self, title: str) -> Chat | None:
         try:

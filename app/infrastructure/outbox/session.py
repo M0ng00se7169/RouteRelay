@@ -20,5 +20,5 @@ class SessionProvider(ABC):
 class MongoSessionProvider(SessionProvider):
 	client: AsyncIOMotorClient
 
-	async def __call__(self) -> AsyncIOMotorClientSession:
+	async def __call__(self) -> AsyncIOMotorClientSession | None:
 		return await self.client.start_session()

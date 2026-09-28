@@ -1,3 +1,4 @@
+from datetime import datetime
 from unittest.mock import (
     AsyncMock,
     MagicMock,
@@ -34,7 +35,7 @@ def _make_chat(title: str = 'room') -> Chat:
 
 
 def _make_message(chat_oid: str, text: str = 'hi') -> Message:
-    return Message(oid='m1', chat_oid=chat_oid, text=Text(text), created_at='2024-01-01T00:00:00')
+    return Message(oid='m1', chat_oid=chat_oid, text=Text(text), created_at=datetime(2024, 1, 1))
 
 
 # --- MemoryChatRepository -------------------------------------------------
@@ -164,6 +165,7 @@ async def test_mongo_get_chat_by_oid_found():
 
     chat = await repo.get_chat_by_oid('c1')
 
+    assert chat is not None
     assert chat.oid == 'c1'
     assert chat.title.as_generic_type() == 'hello'
     assert {listener.oid for listener in chat.listeners} == {'tg-x'}
@@ -224,6 +226,7 @@ async def test_mongo_get_all_chats():
 
     assert total == 1
     assert chats[0].oid == 'c1'
+
 
 
 @pytest.mark.asyncio
@@ -307,12 +310,12 @@ async def test_mongo_get_messages():
     assert total == 1
     assert messages[0].text.as_generic_type() == 'hi'
 
-
 # --- Abstract contracts remain abstract ------------------------------------
 
 
 def test_base_repos_cannot_instantiate():
+    # Deliberate contract check: the bases stay abstract (all methods abstract).
     with pytest.raises(TypeError):
-        BaseChatsRepository()
+        BaseChatsRepository()  # type: ignore[abstract]
     with pytest.raises(TypeError):
-        BaseMessagesRepository()
+        BaseMessagesRepository()  # type: ignore[abstract]

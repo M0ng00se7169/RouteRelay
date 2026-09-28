@@ -19,6 +19,7 @@ from application.api.lifespan import (
 	start_kafka_consumer,
 	stop_kafka_consumer,
 )
+from infrastructure.message_brokers.base import BaseMessageBroker
 
 TOPIC = 'new-messages'
 
@@ -28,12 +29,21 @@ def _counter_value(name: str, labels: dict | None = None) -> float:
 	return value if value is not None else 0.0
 
 
-class _BatchBroker:
+class _BatchBroker(BaseMessageBroker):
 	"""Yields a fixed batch of messages, then blocks forever (like a real
 	idle consumer) so the loop stays alive until the test cancels it."""
 
 	def __init__(self, messages: list) -> None:
 		self._messages = messages
+
+	async def start(self) -> None:
+		...
+
+	async def close(self) -> None:
+		...
+
+	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
+		...
 
 	def start_consuming(self, topic: str):
 		return self._consume()
@@ -143,14 +153,17 @@ async def test_consumer_loop_counts_errors_without_dying():
 # --- kafka_consumer_up heartbeat (ADR-0006, Chunk 3.2) ----------------------
 
 
-class _BlockingBroker:
+class _BlockingBroker(BaseMessageBroker):
 	"""Consumer that yields nothing and blocks forever (healthy but idle)."""
 
-	def start(self):
-		pass
+	async def start(self) -> None:
+		...
 
-	def close(self):
-		pass
+	async def close(self) -> None:
+		...
+
+	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
+		...
 
 	def start_consuming(self, topic: str):
 		return self._consume()
@@ -193,7 +206,7 @@ async def _msg_then_block_stream(text: str):
 	await asyncio.Event().wait()  # block forever — never raises
 
 
-class _ScriptedBroker:
+class _ScriptedBroker(BaseMessageBroker):
 	"""`start_consuming` returns the scripted streams in order; once the script
 	is exhausted it blocks forever (healthy idle consumer) and sets `exhausted`
 	so tests can await that instead of polling with asyncio.sleep (which would
@@ -203,6 +216,18 @@ class _ScriptedBroker:
 		self._streams = list(streams)
 		self.calls = 0
 		self.exhausted = asyncio.Event()
+
+	async def start(self) -> None:
+		...
+
+	async def close(self) -> None:
+		...
+
+	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
+		...
+
+	def stop_consuming(self) -> None:
+		...
 
 	def start_consuming(self, topic: str):
 		self.calls += 1
@@ -255,7 +280,6 @@ def _app_with(mapping):
 
 @pytest.mark.asyncio
 async def test_consumer_heartbeat_transitions_on_start_and_stop():
-	from infrastructure.message_brokers.base import BaseMessageBroker
 	from logic.mediator.base import Mediator
 	from settings.config import Config
 
@@ -282,7 +306,6 @@ async def test_consumer_heartbeat_transitions_on_start_and_stop():
 async def test_consumer_loop_survives_crash_and_reconnects():
 	# O-1: a stream crash must NOT kill the loop. The task stays alive, counts
 	# reconnects, and keeps the heartbeat up; only stop_kafka_consumer drops it.
-	from infrastructure.message_brokers.base import BaseMessageBroker
 	from logic.mediator.base import Mediator
 	from settings.config import Config
 

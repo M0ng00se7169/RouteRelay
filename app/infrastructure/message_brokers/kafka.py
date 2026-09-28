@@ -3,6 +3,7 @@ from dataclasses import (
 	dataclass,
 	field,
 )
+from typing import Any
 
 import orjson
 from aiokafka import AIOKafkaConsumer
@@ -59,11 +60,15 @@ class KafkaMessageBroker(BaseMessageBroker):
 		if self.consumer is not None:
 			await self.consumer.stop()
 
-	async def start_consuming(self, topic: str) -> AsyncIterator[dict]:
+	def start_consuming(self, topic: str) -> AsyncIterator[dict[str, Any]]:
 		if self.consumer is None:
 			raise RuntimeError('KafkaMessageBroker.start_consuming called before start()')
 		self.consumer.subscribe(topics=[topic])
+		return self._consume()
 
+	async def _consume(self) -> AsyncIterator[dict[str, Any]]:
+		# mypy narrows `self.consumer` to None inside closures; assert it here.
+		assert self.consumer is not None
 		async for message in self.consumer:
 			yield orjson.loads(message.value)
 

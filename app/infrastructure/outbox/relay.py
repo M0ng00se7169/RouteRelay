@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import perf_counter
 
@@ -15,7 +16,10 @@ from infrastructure.metrics import (
 	safe_observe,
 	safe_set,
 )
-from infrastructure.outbox.base import BaseOutboxRepository
+from infrastructure.outbox.base import (
+    BaseOutboxRepository,
+    OutboxRow,
+)
 from infrastructure.resilience import (
 	CircuitBreaker,
 	CircuitOpenError,
@@ -43,6 +47,18 @@ class OutboxRelay:
 	# None disables the breaker (tests, dummy container).
 	circuit_breaker: CircuitBreaker | None = None
 
+	def _send_operation(self, row: OutboxRow) -> Callable[[], Awaitable[None]]:
+		# Closure (not a lambda bound in the loop) so mypy can infer the types —
+		# the relay's sends go through the optional breaker's call().
+		async def send() -> None:
+			await self.message_broker.send_message(
+				topic=row.topic,
+				key=row.key,
+				value=row.payload,
+			)
+
+		return send
+
 	async def _tick(self) -> None:
 		# True backlog, not capped at batch_size (ADR-0006, G10/Chunk 2.1).
 		safe_set(outbox_pending, await self.outbox_repository.count_unsent())
@@ -68,13 +84,7 @@ class OutboxRelay:
 			rejected = False
 			try:
 				if self.circuit_breaker is not None:
-					await self.circuit_breaker.call(
-						lambda row=row: self.message_broker.send_message(
-							key=row.key,
-							topic=row.topic,
-							value=row.payload,
-						),
-					)
+					await self.circuit_breaker.call(self._send_operation(row))
 				else:
 					await self.message_broker.send_message(
 						key=row.key,
