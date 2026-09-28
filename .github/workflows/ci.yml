@@ -1,11 +1,12 @@
 name: CI
 
 # Quality gates for the kafka-chat backend. Mirrors the project's real
-# workflow: the pre-commit suite (pyupgrade, ruff, add-trailing-comma,
-# isort — the repo deliberately does NOT use `ruff format`), the pytest
-# suite (fully self-contained: in-memory repositories, no Mongo/Kafka
-# needed), config validation for the observability stack (promtool +
-# amtool), and a build check for the app image.
+# workflow: the pre-commit suite (pyupgrade, ruff, add-trailing-comma —
+# the repo deliberately does NOT use `ruff format`), a strict mypy type
+# check over the whole app package, the pytest suite (fully self-contained:
+# in-memory repositories, no Mongo/Kafka needed), config validation for
+# the observability stack (promtool + amtool), and a build check for the
+# app image.
 
 on:
   push:
@@ -76,6 +77,40 @@ jobs:
       - name: Run pytest
         working-directory: app
         run: uv run --frozen pytest -q
+
+  typecheck:
+    name: Type check (mypy)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv
+        # Same pin as the tests job and the Dockerfile builder: one uv version
+        # everywhere, and --frozen installs exactly the locked mypy.
+        uses: astral-sh/setup-uv@v10.2.0
+        with:
+          version: '0.12.19'
+          enable-cache: true
+
+      - name: Install dependencies (incl. dev group)
+        run: uv sync --frozen
+
+      - name: Cache mypy incremental state
+        # Rolling cache (mypy docs pattern): key is unique per run so a fresh
+        # snapshot is always saved; restore-keys picks the latest previous one
+        # and mypy re-checks only what changed since it.
+        uses: actions/cache@v4
+        with:
+          path: .mypy_cache
+          key: mypy-${{ runner.os }}-${{ github.run_id }}
+          restore-keys: |
+            mypy-${{ runner.os }}-
+
+      # NO working-directory here on purpose: [tool.mypy].files = ["app"] is
+      # resolved relative to the repo root (pytest's app/-relative run is the
+      # exception, not the rule).
+      - name: Run mypy (strict)
+        run: uv run --frozen mypy
 
   configs:
     name: Observability configs (promtool + amtool)

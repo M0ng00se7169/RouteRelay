@@ -80,6 +80,17 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-28 — mypy wired into CI + as a CD deploy gate.** `.github/workflows/ci.yml`: new
+  `typecheck` job (name `Type check (mypy)`) — same uv pattern as tests (setup-uv@v10.2.0 pinned
+  0.12.19, `uv sync --frozen` so CI runs exactly the locked mypy 1.20.2), plus a rolling
+  `.mypy_cache` cache (actions/cache@v4, key `mypy-<os>-<run_id>`, restore-keys prefix — the mypy
+  docs recipe). Runs from the REPO ROOT (no working-directory): `[tool.mypy].files=["app"]` is
+  resolved relative to pyproject.toml. CI is now 5 jobs: lint, tests, typecheck, configs,
+  docker-build. `.github/workflows/cd.yml`: a second `wait-on-check-action` gate for
+  `Type check (mypy)` alongside `Tests (pytest)` — check-name must match the job NAME exactly.
+  README CI/CD story synced (5 jobs, both gates). Committed separately from the strict migration
+  (already landed as 6e7180a). YAML structure validated via yaml.safe_load; pre-commit hooks skip
+  YAML (pyupgrade/ruff file filters).
 - **2026-09-28 — mypy switched to FULL `strict = true` (local-only, all 509 initial errors fixed at the root).**
   pyproject `[tool.mypy]`: `strict = true` + `disallow_any_generics`/`disallow_subclassing_any`/
   `disallow_any_unimported` (user decision: NO test overrides — tests fully annotated too). 509
