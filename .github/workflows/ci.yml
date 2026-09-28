@@ -34,7 +34,8 @@ jobs:
           python-version: '3.12'
 
       - name: Cache pre-commit environments
-        uses: actions/cache@v4
+        # v5 runs on Node 24 (v4 targets the deprecated Node 20).
+        uses: actions/cache@v5
         with:
           path: ~/.cache/pre-commit
           key: pre-commit-${{ runner.os }}-${{ hashFiles('.pre-commit-config.yaml') }}
@@ -57,10 +58,13 @@ jobs:
         # Pin the exact uv version the uv.lock format was generated with
         # (same pin as the Dockerfile's builder image). The action's cache
         # covers both the uv binary and the downloaded wheels/interpreters.
+        # cache-suffix is per-job: tests and typecheck share one uv.lock, and
+        # identical cache keys race — the losing job fails its cache save.
         uses: astral-sh/setup-uv@v10.2.0
         with:
           version: '0.12.19'
           enable-cache: true
+          cache-suffix: tests
 
       # No actions/setup-python here on purpose: uv reads .python-version
       # (3.12) and provisions the interpreter itself — same source of truth
@@ -86,11 +90,13 @@ jobs:
 
       - name: Install uv
         # Same pin as the tests job and the Dockerfile builder: one uv version
-        # everywhere, and --frozen installs exactly the locked mypy.
+        # everywhere, and --frozen installs exactly the locked mypy. Distinct
+        # cache-suffix per job — see the tests job comment.
         uses: astral-sh/setup-uv@v10.2.0
         with:
           version: '0.12.19'
           enable-cache: true
+          cache-suffix: typecheck
 
       - name: Install dependencies (incl. dev group)
         run: uv sync --frozen
@@ -98,8 +104,9 @@ jobs:
       - name: Cache mypy incremental state
         # Rolling cache (mypy docs pattern): key is unique per run so a fresh
         # snapshot is always saved; restore-keys picks the latest previous one
-        # and mypy re-checks only what changed since it.
-        uses: actions/cache@v4
+        # and mypy re-checks only what changed since it. v5 runs on Node 24
+        # (v4 targets the deprecated Node 20).
+        uses: actions/cache@v5
         with:
           path: .mypy_cache
           key: mypy-${{ runner.os }}-${{ github.run_id }}
