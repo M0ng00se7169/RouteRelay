@@ -23,12 +23,21 @@ services:
       mongodb:
         condition: service_healthy
     restart: 'no'
-    command: >
-      bash -c "for i in $$(seq 1 30); do
-        mongosh --host mongodb:27017
-          --eval \"rs.initiate({ _id: 'rs0', members: [{ _id: 0, host: 'mongodb:27017' }] })\"
-          && break;
-        echo 'waiting for mongo...'; sleep 2; done"
+    # List-form command + block scalar: the old quoted-string version died with
+    # `syntax error near unexpected token '&&'` (nested YAML/bash quoting), so a
+    # FIRST-TIME clone with a fresh volume never got its replica set initiated.
+    # Idempotent: skips rs.initiate when the replica set already exists (old
+    # volumes). $$ = literal $ after compose variable interpolation.
+    command:
+      - bash
+      - -c
+      - |
+        if [ "$$(mongosh --quiet --host mongodb:27017 --eval 'JSON.stringify(rs.status().ok)')" != "1" ]; then
+          for i in $$(seq 1 30); do
+            mongosh --host mongodb:27017 --eval 'rs.initiate({ _id: "rs0", members: [{ _id: 0, host: "mongodb:27017" }] })' && break
+            echo 'waiting for mongo...'; sleep 2
+          done
+        fi
     networks:
       - backend
 

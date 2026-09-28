@@ -36,7 +36,7 @@ Feature: <name> (<kind>) — <description>
        app/application/api/messages/. Route calls mediator.handle_command/handle_query.
 [ ] 5. Test: add an in-memory test (app/test/...) using init_dummy_container + dependency_overrides.
        For message paths, also override BaseMessagesRepository (issue #7). Run: cd app && pytest
-[ ] 6. Lint: poetry run pre-commit run --all-files
+[ ] 6. Lint: uv run pre-commit run --all-files
 ```
 
 ## Known issues to watch (cite docs/known-issues.md)

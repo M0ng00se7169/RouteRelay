@@ -47,11 +47,11 @@ started/stopped via the app lifespan (`app/application/api/lifespan.py` → `ini
 `close_message_broker`). Note: the lifespan only **starts the broker**; it does **not** start a
 consumer loop, so inbound Kafka→WebSocket relay is not active (see `docs/known-issues.md` #5).
 
-### B. Local Poetry (no Docker)
+### B. Local uv (no Docker)
 
 ```bash
-poetry install
-poetry run uvicorn --factory application.api.main:create_app --reload --host 0.0.0.0 --port 8000
+uv sync
+uv run uvicorn --factory application.api.main:create_app --reload --host 0.0.0.0 --port 8000
 ```
 
 Requires reachable Mongo + Kafka at the configured URLs (`Config` / `.env`). Run from a directory
@@ -66,7 +66,7 @@ resolve:
 
 ```bash
 cd app
-poetry run pytest          # or: pytest
+uv run pytest          # or: pytest
 ```
 
 The swap is done in `app/test/fixtures.py` (`init_dummy_container` rebinds `BaseChatsRepository` →
@@ -92,6 +92,6 @@ The swap is done in `app/test/fixtures.py` (`init_dummy_container` rebinds `Base
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | App container won't start | Kafka not healthy yet | `make kafka` first, wait for healthcheck, then `make app`. |
-| Tests fail with import errors | Not in `app/` dir, or venv not active | `cd app && poetry run pytest`. |
+| Tests fail with import errors | Not in `app/` dir, or venv not active | `cd app && uv run pytest`. |
 | Writes succeed but no Kafka messages | Broker down or topic mismatch | Check `kafka-ui`; verify `Config` topic/env vars. |
 | `CommandHandlersNotRegisteredException` | Forgot `mediator.register_command` in `init_mediator` | Add the registration (see `docs/di-reference.md`). |

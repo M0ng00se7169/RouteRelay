@@ -36,39 +36,42 @@ Open a terminal in the project root (`E:\Studia\python\fastapi_examples`).
 
 ### 1.1 Install the toolchain
 
-This project uses **Poetry** for dependency management. If you have never run
+This project uses **uv** for dependency management. If you have never run
 it:
 
 ```bash
-poetry install
+uv sync
 ```
 
-What this does: reads `pyproject.toml` and installs FastAPI, pytest, Motor,
-aiokafka, ruff, pre-commit, etc. into a local virtual environment. Run it once
-after cloning, and again whenever `pyproject.toml` changes.
+What this does: reads `pyproject.toml` + `uv.lock` and installs FastAPI, pytest, Motor,
+aiokafka, ruff, pre-commit, etc. into a local virtual environment (`.venv/`). Run it once
+after cloning, and again whenever `pyproject.toml` or `uv.lock` change.
 
-> If `poetry` is not found, install it first: `pip install poetry` (or follow
-> https://python-poetry.org/docs/#installation).
+> If `uv` is not found, install it first: `pip install uv` (or follow
+> https://docs.astral.sh/uv/getting-started/installation/).
 
 ### 1.2 Confirm Python version
 
 ```bash
-poetry run python --version
+uv run python --version
 ```
 
-The repo targets a modern Python (3.12/3.13). If your system Python is old,
-Poetry will tell you. Use `pyenv` or the project's pinned version.
+The repo pins Python 3.12 in `.python-version`. If your system Python does not
+match, uv downloads and manages the right interpreter itself — no pyenv needed.
 
 ### 1.3 (Optional) Make an editable shell
 
-So you don't type `poetry run` every time:
+So you don't type `uv run` every time, activate the project venv:
 
 ```bash
-poetry shell
+# Linux/macOS
+source .venv/bin/activate
+# Windows (PowerShell)
+.venv\Scripts\Activate.ps1
 ```
 
 Now `pytest`, `ruff`, etc. work directly. The rest of this guide assumes you
-either prefix commands with `poetry run` or are inside `poetry shell`.
+either prefix commands with `uv run` or have the `.venv` activated.
 
 ---
 
@@ -107,7 +110,7 @@ This is the single most important check. It needs **no Mongo, no Kafka**.
 
 ```bash
 cd app
-poetry run pytest
+uv run pytest
 ```
 
 Expected output (abridged):
@@ -139,19 +142,19 @@ If the commit touches chats, you don't need to run everything:
 
 ```bash
 # by path
-poetry run pytest test/application/api/test_messages.py
+uv run pytest test/application/api/test_messages.py
 
 # by keyword in the test name
-poetry run pytest -k "create_chat"
+uv run pytest -k "create_chat"
 
 # by marker
-poetry run pytest -m asyncio
+uv run pytest -m asyncio
 ```
 
 ### 3.3 Run a single test with full traceback
 
 ```bash
-poetry run pytest test/logic/test_messages.py::test_create_chat_command_success -vv
+uv run pytest test/logic/test_messages.py::test_create_chat_command_success -vv
 ```
 
 `-vv` = extra verbose (shows each assertion and fixture).
@@ -165,15 +168,15 @@ Even if tests pass, the project enforces **Ruff** (lint + format) and
 by CI / pre-commit, so check locally:
 
 ```bash
-poetry run ruff check .
-poetry run ruff format --check .     # shows files that would be reformatted
+uv run ruff check .
+uv run ruff format --check .     # shows files that would be reformatted
 ```
 
 If Ruff complains, auto-fix what it safely can:
 
 ```bash
-poetry run ruff check . --fix
-poetry run ruff format .
+uv run ruff check . --fix
+uv run ruff format .
 ```
 
 Project style is fixed and non-negotiable (from `CLAUDE.md`):
@@ -186,7 +189,7 @@ So do not "fix" Ruff by changing the config; fix the code.
 ### 4.1 Pre-commit (the full gate)
 
 ```bash
-poetry run pre-commit run --all-files
+uv run pre-commit run --all-files
 ```
 
 This runs *all* hooks (Ruff + isort + any others). Run this before you consider
@@ -270,7 +273,7 @@ r = client.post(app.url_path_for('create_chat_handler'), json={'title': 'hello'}
 print(r.status_code, r.json())
 ```
 
-Run it: `poetry run python scratch_check.py`. This proves the *route → handler
+Run it: `uv run python scratch_check.py`. This proves the *route → handler
 → repository* path end to end with zero external services.
 
 > Do **not** add this as a permanent test file — it is just a quick manual probe.
@@ -360,8 +363,8 @@ make all-down
 You can tell your reviewer / merge bot the commit is verified when **all** of
 these are green:
 
-- [ ] `cd app && poetry run pytest` → all passed
-- [ ] `poetry run pre-commit run --all-files` → clean
+- [ ] `cd app && uv run pytest` → all passed
+- [ ] `uv run pre-commit run --all-files` → clean
 - [ ] The diff in `git show --stat` maps to the ticket's acceptance criteria
 - [ ] Every new handler is registered in `app/logic/init.py` (grep check)
 - [ ] At least one in-memory test covers the happy path of the change
@@ -375,15 +378,14 @@ If any box is unchecked, the commit is **not** verified yet — fix or ask.
 
 ```bash
 # from repo root
-poetry install                      # one-time / after deps change
-poetry shell                        # optional: enter venv
+uv sync                             # one-time / after deps change
 
 # verify (the loop you'll repeat)
 cd app
-poetry run pytest                  # main correctness check (no infra needed)
-poetry run pytest -k "create_chat" # narrow run
-poetry run ruff check .            # lint
-poetry run pre-commit run --all-files  # full gate
+uv run pytest                       # main correctness check (no infra needed)
+uv run pytest -k "create_chat"      # narrow run
+uv run ruff check .                 # lint
+uv run pre-commit run --all-files   # full gate
 
 # inspect
 git log --oneline -5

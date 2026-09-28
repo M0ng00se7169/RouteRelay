@@ -52,26 +52,30 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: Install Poetry
-        # 2.3.0 = supports PEP 621 [project] AND PEP 735 [dependency-groups]
-        # (groups landed in 2.2.0; the lock-hash bug in them was fixed in 2.3.0)
-        run: pipx install poetry==2.3.0
-
-      - uses: actions/setup-python@v6
+      - name: Install uv
+        # Pin the exact uv version the uv.lock format was generated with
+        # (same pin as the Dockerfile's builder image). The action's cache
+        # covers both the uv binary and the downloaded wheels/interpreters.
+        uses: astral-sh/setup-uv@v10.2.0
         with:
-          python-version: '3.12'
-          cache: poetry
+          version: '0.12.19'
+          enable-cache: true
+
+      # No actions/setup-python here on purpose: uv reads .python-version
+      # (3.12) and provisions the interpreter itself — same source of truth
+      # as local dev and the Docker build.
 
       - name: Install dependencies (incl. dev group)
-        # package-mode=false (PEP 621 pyproject): poetry install manages the
-        # env only, there is no project package to skip.
-        run: poetry install --no-interaction
+        # --frozen: CI must install the lockfile, never re-resolve. The
+        # application repo has no [build-system], so there is no project
+        # package to install — uv sync manages dependencies only.
+        run: uv sync --frozen
 
       # The suite spins up in-memory repositories (app/test/fixtures.py) —
       # no MongoDB, Kafka or any other service required.
       - name: Run pytest
         working-directory: app
-        run: poetry run pytest -q
+        run: uv run --frozen pytest -q
 
   configs:
     name: Observability configs (promtool + amtool)

@@ -1,0 +1,18 @@
+# Build context hygiene — keep caches/venvs out of the image layers and the
+# context upload small. Source lives in app/; everything else the build needs
+# is pyproject.toml + uv.lock.
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+docs/
+.dockerignore
+Dockerfile
+docker_compose/
+deploy/
+loadtest/
+models.json

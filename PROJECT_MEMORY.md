@@ -5,14 +5,14 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-28** · Tests: **217 passed, 0 warnings** (`cd app && poetry run pytest`, ~6s) · mypy: **clean, 121 files** (`poetry run mypy`) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest, promtool/amtool, docker build)
+> Last updated: **2026-09-28** · Tests: **217 passed, 0 warnings** (`cd app && uv run pytest`, ~6s) · mypy: **clean, 121 files** (`uv run mypy`) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest via uv, promtool/amtool, docker build)
 
 ---
 
 ## 1. What this project is
 
 FastAPI + Kafka + MongoDB multi-user chat backend demonstrating DDD, CQRS, and event-driven
-architecture. One demo user (OAuth2 password flow, JWT). Python 3.11+, Poetry, pytest.
+architecture. One demo user (OAuth2 password flow, JWT). Python 3.12 (`.python-version`), uv, pytest.
 Details: `docs/architecture.md`, `CLAUDE.md`.
 
 ---
@@ -74,12 +74,39 @@ Key wiring facts:
   (see `docs/cqrs-contract.md`).
 - **Formatting:** ruff line-length 100, single quotes, **tabs** in some files / **4 spaces** in
   others — match the file you are editing, do not reformat.
-- **After code changes:** `cd app && poetry run pytest` (all 211 must stay green).
+- **After code changes:** `cd app && uv run pytest` (all 217 must stay green).
 
 ---
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-28 — Migration Poetry → uv (local + Dockerfile + CI).** pyproject: `[tool.poetry]`
+  package-mode block dropped; NO `[build-system]` (application repo — `uv sync` manages deps only);
+  `.python-version` = `3.12` added (the single pin uv reads everywhere). `uv.lock` (74 pkgs)
+  replaces `poetry.lock` (deleted); `.venv/` gitignored. Verified locally: 217 passed, mypy clean
+  (121 files), ruff clean, `uv lock --check` fresh (local uv 0.12.7; cross-checked with pinned
+  0.12.19). **Dockerfile rewritten** to the uv pattern: builder
+  `ghcr.io/astral-sh/uv:python3.12-bookworm-slim` runs `uv lock --check`, then builds `/opt/venv`
+  (prod, `--no-dev`) and `/opt/venv-dev` (`--all-groups`) with `UV_COMPILE_BYTECODE=1` + BuildKit
+  cache mounts. **Stages reordered: prod is LAST** — compose and docker/build-push-action build the
+  final stage by default, and the old file ended on dev, so CI/GHCR were actually shipping the DEV
+  image; prod is now non-root (`appuser`) with a bare-run CMD. Venvs live OUTSIDE `/app` on purpose:
+  dev compose bind-mounts `../app/` over `/app` and would hide a venv inside the workdir; dev stage
+  is selected via new `target: dev` in `docker_compose/app.yaml`. **CI tests job**: setup-uv@v10.2.0
+  (version 0.12.19, enable-cache) + `uv sync --frozen` + `uv run --frozen pytest -q`; its
+  actions/setup-python was removed (uv provisions 3.12 from `.python-version` — same source as
+  Docker/local). Lint job unchanged; cd.yml untouched (builds the Dockerfile, no pkg manager).
+  Docker build + smoke test VERIFIED locally (2026-09-28, daemon up): both targets built, uv boot
+  + /api/docs + /metrics 200 in dev AND prod (prod via the image's own CMD, non-root, against
+  real mongo/kafka on the compose `backend` network); `uv lock --check` also cross-checked inside
+  the exact builder image (uv 0.12.19/CPython 3.12.12). **COPY gotcha hit live:** the old
+  `COPY /app/ /app/**` copied app/'s CHILDREN into /app — the natural rewrite `COPY ./app ./app`
+  nests code at /app/app/ and flat imports break; correct form is `COPY ./app/ ./`. Windows Git
+  Bash gotcha: `docker run -v /src` gets mangled to C:/Program Files/Git/src — use
+  `MSYS_NO_PATHCONV=1` + `$(pwd -W)`. Docs switched to `uv run`: README, local-development,
+  user-guide, architecture, agents.md; historical ADR/plan
+  docs left as-is. Gotchas: (1) uv defaults to the newest interpreter — without `.python-version`
+  it picked local 3.14; (2) keep generated files ASCII — em-dashes broke two write attempts.
 - **2026-09-28 — mypy added (pragmatic baseline, LOCAL-ONLY enforcement).** Dev dep `mypy@^1.18.2`
   (resolved 1.20.2) + `[tool.mypy]` in pyproject: pydantic plugin, `check_untyped_defs`,
   `no_implicit_optional`, `warn_unused_ignores/configs`, `files=["app"]`; `ignore_missing_imports`
@@ -319,6 +346,21 @@ Key wiring facts:
 index of the formerly-listed issues. **No open issues remain:** all 8 legacy entries plus O-1
 (Kafka consumer reconnect + heartbeat), O-2 (relay `'kafka'` breaker) and O-3 (ruff in poetry env)
 are verified fixed as of 2026-09-25.
+
+- **2026-09-28 — fresh-clone drill fixed `init-mongo` (was broken for FIRST-TIME users).**
+  Simulated a fresh `git clone` (repo copied to /tmp minus local junk, `.env.example` → `.env`)
+  and ran the README flow. The uv-migrated Dockerfile/compose worked, but `storages.yaml`'s
+  init-mongo died with `syntax error near unexpected token '&&'` (nested YAML/bash quoting) —
+  pre-existing, invisible locally because the old `docker_compose_dbdata6` volume was already
+  initiated. On a truly fresh volume the replica set never came up → transactions/outbox dead.
+  Fixed with list-form command + block scalar, idempotent (skips when `rs.status().ok == 1`).
+  Verified BOTH paths on a throwaway compose project (`-p frest` → fresh volume): fresh volume
+  initiates + PRIMARY + transaction roundtrip; already-initiated volume skips cleanly (exit 0).
+  Also demystified: aiokafka `GroupCoordinatorNotAvailableError` spam on cold boot is benign
+  (auto-create lag; settles in ~1 min, `kafka_consumer_up 1`, topic `new-messages` created),
+  and OpenAPI JSON lives at `/openapi.json` (only docs_url is under `/api`). Compose project
+  name comes from the FIRST `-f` file's dir — both copies get `docker_compose`, so volumes are
+  shared across checkouts (use `-p` to isolate).
 
 ---
 

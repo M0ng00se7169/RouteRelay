@@ -46,7 +46,7 @@ inhibition pairs, Telegram transport, silencing procedure).
 | **Validation / config**  | Pydantic, pydantic-settings           |
 | **Serialization**        | orjson                                |
 | **Dependency injection** | punq                                  |
-| **Packaging**            | Poetry                                |
+| **Packaging**            | uv                                    |
 | **Containers**           | Docker, Docker Compose                |
 | **Testing**              | pytest, pytest-asyncio, Faker, httpx  |
 | **Code quality**         | pre-commit, Ruff, isort, pyupgrade    |
@@ -92,7 +92,7 @@ fastapi_examples/
 ├── Makefile
 ├── prometheus.yml
 ├── pyproject.toml
-└── poetry.lock
+└── uv.lock
 ```
 
 ---
@@ -331,7 +331,7 @@ Additional `.env` variables used by Docker Compose:
 ### Prerequisites
 
 - Docker & Docker Compose
-- Poetry (for local development)
+- [uv](https://docs.astral.sh/uv/) (for local development)
 - Make (optional, for convenience targets)
 
 
@@ -388,8 +388,8 @@ make app        # FastAPI application
 ### 4. Local development (without Docker)
 
 ```bash
-poetry install
-poetry run uvicorn --factory application.api.main:create_app --reload --host 0.0.0.0 --port 8000
+uv sync
+uv run uvicorn --factory application.api.main:create_app --reload --host 0.0.0.0 --port 8000
 ```
 
 Run from the `app/` directory or ensure `app/` is on `PYTHONPATH`. MongoDB and Kafka must be reachable at the configured URLs.
@@ -397,7 +397,7 @@ Run from the `app/` directory or ensure `app/` is on `PYTHONPATH`. MongoDB and K
 ### 5. Run tests
 
 ```bash
-poetry run pytest
+uv run pytest
 ```
 
 Tests use in-memory repositories (see `app/test/` fixtures).
@@ -405,8 +405,8 @@ Tests use in-memory repositories (see `app/test/` fixtures).
 ### 6. Pre-commit hooks
 
 ```bash
-poetry run pre-commit install
-poetry run pre-commit run --all-files
+uv run pre-commit install
+uv run pre-commit run --all-files
 ```
 
 The same suite runs as the **Lint** job in CI (see below) — if it passes locally, CI stays green.
