@@ -1,10 +1,12 @@
 import json
 import logging
+from typing import Any
 
+from _pytest.logging import LogCaptureFixture
 from fastapi.testclient import TestClient
 
 
-def _post(client: TestClient, payload: dict):
+def _post(client: TestClient, payload: dict[str, Any]) -> Any:
     return client.post(
         '/ops/alerts',
         content=json.dumps(payload),
@@ -12,7 +14,7 @@ def _post(client: TestClient, payload: dict):
     )
 
 
-def _alert_log_records(caplog) -> dict:
+def _alert_log_records(caplog: LogCaptureFixture) -> dict[str, str]:
     messages = (r.getMessage() for r in caplog.records)
     return {
         m.split()[1]: next(
@@ -23,12 +25,12 @@ def _alert_log_records(caplog) -> dict:
     }
 
 
-def test_sink_rejects_get(client):
+def test_sink_rejects_get(client: TestClient) -> None:
     # Only POST (Alertmanager webhook method) is defined on the sink route.
     assert client.get('/ops/alerts').status_code == 405
 
 
-def test_sink_returns_204_on_valid_payload(client):
+def test_sink_returns_204_on_valid_payload(client: TestClient) -> None:
     payload = {
         'version': '4',
         'alerts': [
@@ -49,7 +51,7 @@ def test_sink_returns_204_on_valid_payload(client):
     assert _post(client, payload).status_code == 204
 
 
-def test_sink_maps_severity_to_log_levels(client, caplog):
+def test_sink_maps_severity_to_log_levels(client: TestClient, caplog: LogCaptureFixture) -> None:
     # critical -> CRITICAL, warning -> WARNING; resolved alerts are INFO.
     payload = {
         'alerts': [
@@ -78,7 +80,7 @@ def test_sink_maps_severity_to_log_levels(client, caplog):
     assert by_name['ResolvedOne'] == 'INFO'
 
 
-def test_sink_unknown_severity_falls_back_to_warning(client, caplog):
+def test_sink_unknown_severity_falls_back_to_warning(client: TestClient, caplog: LogCaptureFixture) -> None:
     # The severity set is closed today (critical/warning); a new severity must
     # not make firing alerts invisible, so firing falls back to WARNING.
     payload = {
@@ -95,7 +97,7 @@ def test_sink_unknown_severity_falls_back_to_warning(client, caplog):
     assert _alert_log_records(caplog)['OddOne'] == 'WARNING'
 
 
-def test_sink_message_includes_summary_and_runbook(client, caplog):
+def test_sink_message_includes_summary_and_runbook(client: TestClient, caplog: LogCaptureFixture) -> None:
     payload = {
         'alerts': [
             {
@@ -114,7 +116,7 @@ def test_sink_message_includes_summary_and_runbook(client, caplog):
     assert any('breaker open' in m and 'docs/runbooks/kafka-outage.md' in m for m in messages)
 
 
-def test_sink_malformed_body_returns_400(client):
+def test_sink_malformed_body_returns_400(client: TestClient) -> None:
     resp = client.post(
         '/ops/alerts',
         content='not-json',

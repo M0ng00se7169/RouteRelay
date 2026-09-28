@@ -8,10 +8,17 @@ collide between tests.
 """
 
 from time import monotonic
+from typing import cast
 
 import pytest
 from prometheus_client import REGISTRY
 
+from domain.entities.messages import Chat, Message
+from infrastructure.repositories.filters.messages import GetMessagesFilters
+from infrastructure.repositories.messages.base import (
+    BaseChatsRepository,
+    BaseMessagesRepository,
+)
 from infrastructure.resilience import (
     CircuitBreaker,
     CircuitBreakerChatsRepository,
@@ -45,7 +52,7 @@ def _state(name: str) -> float:
 
 
 @pytest.mark.asyncio
-async def test_success_passes_through_and_stays_closed():
+async def test_success_passes_through_and_stays_closed() -> None:
     breaker = CircuitBreaker(name='unit-success', failure_threshold=2, recovery_time=30)
     dep = FlakyDependency(error=None)
 
@@ -55,7 +62,7 @@ async def test_success_passes_through_and_stays_closed():
 
 
 @pytest.mark.asyncio
-async def test_breaker_opens_after_threshold_then_fails_fast():
+async def test_breaker_opens_after_threshold_then_fails_fast() -> None:
     breaker = CircuitBreaker(name='unit-open', failure_threshold=3, recovery_time=60)
     dep = FlakyDependency()
 
@@ -73,7 +80,7 @@ async def test_breaker_opens_after_threshold_then_fails_fast():
 
 
 @pytest.mark.asyncio
-async def test_consecutive_not_cumulative_failures():
+async def test_consecutive_not_cumulative_failures() -> None:
     # A single success between failures resets the consecutive-failure count.
     breaker = CircuitBreaker(name='unit-consecutive', failure_threshold=3, recovery_time=60)
     dep = FlakyDependency()
@@ -93,7 +100,7 @@ async def test_consecutive_not_cumulative_failures():
 
 
 @pytest.mark.asyncio
-async def test_half_open_probe_failure_reopens():
+async def test_half_open_probe_failure_reopens() -> None:
     breaker = CircuitBreaker(name='unit-halfopen-fail', failure_threshold=1, recovery_time=30)
     dep = FlakyDependency()
 
@@ -114,7 +121,7 @@ async def test_half_open_probe_failure_reopens():
 
 
 @pytest.mark.asyncio
-async def test_probe_failure_reopens_even_with_high_threshold():
+async def test_probe_failure_reopens_even_with_high_threshold() -> None:
 	# Regression: with failure_threshold > 1, a failed probe must reopen the
 	# breaker immediately. Rerouting the probe failure through the consecutive
 	# failure count would leave the breaker stuck half-open forever (the probe
@@ -145,7 +152,7 @@ async def test_probe_failure_reopens_even_with_high_threshold():
 
 
 @pytest.mark.asyncio
-async def test_half_open_probe_success_closes():
+async def test_half_open_probe_success_closes() -> None:
     breaker = CircuitBreaker(name='unit-halfopen-ok', failure_threshold=1, recovery_time=30)
     dep = FlakyDependency()
 
@@ -164,7 +171,7 @@ async def test_half_open_probe_success_closes():
 
 
 @pytest.mark.asyncio
-async def test_circuit_open_error_is_not_counted_as_failure():
+async def test_circuit_open_error_is_not_counted_as_failure() -> None:
     # A rejection must not feed back into the failure count (it would keep the
     # breaker open forever after recovery).
     breaker = CircuitBreaker(name='unit-no-feedback', failure_threshold=2, recovery_time=30)
@@ -189,12 +196,16 @@ async def test_circuit_open_error_is_not_counted_as_failure():
 
 
 class FailingChatsRepo:
-    """Minimal chats repo stand-in whose reads always fail."""
+    """Minimal chats repo stand-in whose reads always fail.
+
+    Deliberately duck-typed (only the methods these tests touch); the casts at
+    the proxy construction sites bridge that to the ABC-typed ``inner`` field.
+    """
 
     def __init__(self) -> None:
         self.calls = 0
 
-    async def get_chat_by_oid(self, oid: str):
+    async def get_chat_by_oid(self, oid: str) -> Chat | None:
         self.calls += 1
         raise RuntimeError('mongo is down')
 
@@ -203,38 +214,50 @@ class MemoryChatsRepoStub:
     def __init__(self) -> None:
         self.seen: list[str] = []
 
-    async def get_chat_by_oid(self, oid: str):
+    async def get_chat_by_oid(self, oid: str) -> Chat | None:
         self.seen.append(oid)
-        return {'oid': oid}
+        return cast(Chat, {'oid': oid})
 
 
 @pytest.mark.asyncio
-async def test_chats_proxy_delegates_and_guards():
+async def test_chats_proxy_delegates_and_guards() -> None:
     breaker = CircuitBreaker(name='unit-proxy', failure_threshold=2, recovery_time=60)
-    repo = CircuitBreakerChatsRepository(inner=MemoryChatsRepoStub(), breaker=breaker)
+    # cast: the stub implements only the exercised subset of the ABC.
+    repo = CircuitBreakerChatsRepository(
+        inner=cast(BaseChatsRepository, MemoryChatsRepoStub()),
+        breaker=breaker,
+    )
 
     assert await repo.get_chat_by_oid(oid='c1') == {'oid': 'c1'}
 
-    repo.inner = FailingChatsRepo()
+    failing = FailingChatsRepo()
+    repo.inner = cast(BaseChatsRepository, failing)
     for _ in range(2):
         with pytest.raises(RuntimeError):
             await repo.get_chat_by_oid(oid='c2')
     with pytest.raises(CircuitOpenError):
         await repo.get_chat_by_oid(oid='c2')
-    assert repo.inner.calls == 2
+    assert failing.calls == 2
 
 
 @pytest.mark.asyncio
-async def test_messages_proxy_guards_get_messages():
+async def test_messages_proxy_guards_get_messages() -> None:
     breaker = CircuitBreaker(name='unit-proxy-msgs', failure_threshold=1, recovery_time=60)
 
     class FailingMessagesRepo:
-        async def get_messages(self, chat_oid: str, filters):
+        async def get_messages(
+            self,
+            chat_oid: str,
+            filters: GetMessagesFilters,
+        ) -> tuple[list[Message], int]:
             raise RuntimeError('mongo is down')
 
-    repo = CircuitBreakerMessagesRepository(inner=FailingMessagesRepo(), breaker=breaker)
+    repo = CircuitBreakerMessagesRepository(
+        inner=cast(BaseMessagesRepository, FailingMessagesRepo()),
+        breaker=breaker,
+    )
 
     with pytest.raises(RuntimeError):
-        await repo.get_messages(chat_oid='c1', filters=None)
+        await repo.get_messages(chat_oid='c1', filters=GetMessagesFilters())
     with pytest.raises(CircuitOpenError):
-        await repo.get_messages(chat_oid='c1', filters=None)
+        await repo.get_messages(chat_oid='c1', filters=GetMessagesFilters())

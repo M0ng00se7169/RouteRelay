@@ -22,7 +22,7 @@ async def messages_handlers(
         chat_oid: UUID,
         websocket: WebSocket,
         container: Container = Depends(init_container),
-):
+) -> None:
     connection_manager: BaseConnectionManager = container.resolve(BaseConnectionManager)
     mediator: Mediator = container.resolve(Mediator)
     try:

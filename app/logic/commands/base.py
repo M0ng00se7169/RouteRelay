@@ -4,10 +4,12 @@ from abc import (
 )
 from dataclasses import dataclass
 from typing import (
+    Any,
     Generic,
     TypeVar,
 )
 
+from domain.events.base import BaseEvent
 from logic.mediator.event import EventMediator
 
 
@@ -29,7 +31,7 @@ CR = TypeVar('CR')
 # forbids a non-frozen dataclass from inheriting a frozen one.
 @dataclass
 class CommandHandler(ABC, Generic[CT, CR]):
-    _mediator: EventMediator
+    _mediator: EventMediator[BaseEvent, Any]
 
     @abstractmethod
     async def handle(self, command: CT) -> CR:

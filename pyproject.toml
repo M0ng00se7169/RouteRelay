@@ -69,9 +69,11 @@ docstring-code-format = true
 docstring-code-line-length = 20
 
 [tool.mypy]
-# Pragmatic baseline (2026-09-28): check function bodies even without annotations,
-# but do not demand full annotation coverage yet (no --strict; disallow_untyped_defs
-# etc. to be tightened in follow-ups). See PROJECT_MEMORY.md §4.
+# FULL STRICT (2026-09-28): everything annotated, generics parameterized,
+# no Any-leaks from untyped deps (aiokafka has no stubs — its instances are
+# annotated `Any` at the single boundary in message_brokers/kafka.py).
+# Run from the repo root: `uv run mypy` (files=["app"] is resolved from here).
+# See PROJECT_MEMORY.md §4.
 python_version = "3.11"
 files = ["app"]
 check_untyped_defs = true
@@ -80,6 +82,12 @@ warn_redundant_casts = true
 warn_unused_ignores = true
 warn_unused_configs = true
 plugins = ["pydantic.mypy"]
+strict = true
+
+disallow_any_generics = true
+disallow_subclassing_any = true
+disallow_any_unimported = true
+
 
 [[tool.mypy.overrides]]
 # Untyped third-party dependencies: no stubs shipped.

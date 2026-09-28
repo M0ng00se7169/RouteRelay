@@ -4,5 +4,5 @@ from dataclasses import dataclass
 @dataclass(eq=False)
 class ApplicationException(Exception):
     @property
-    def message(self):
+    def message(self) -> str:
         return 'An error was occurred.'

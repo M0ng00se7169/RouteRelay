@@ -6,7 +6,7 @@ from infrastructure.logging_config import (
 )
 
 
-def test_json_formatter_emits_single_line():
+def test_json_formatter_emits_single_line() -> None:
 	record = logging.LogRecord(
 		name='test.logger',
 		level=logging.INFO,
@@ -21,7 +21,7 @@ def test_json_formatter_emits_single_line():
 	assert '"message": "hello world"' in formatted
 
 
-def test_configure_idempotent_and_no_handlers_fallback():
+def test_configure_idempotent_and_no_handlers_fallback() -> None:
 	root = logging.getLogger()
 	saved = root.handlers[:]
 	try:

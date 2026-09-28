@@ -7,7 +7,9 @@ forever; the loop task is cancelled once the metric assertions pass.
 """
 
 import asyncio
+from collections.abc import AsyncIterator
 from types import SimpleNamespace
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -24,7 +26,7 @@ from infrastructure.message_brokers.base import BaseMessageBroker
 TOPIC = 'new-messages'
 
 
-def _counter_value(name: str, labels: dict | None = None) -> float:
+def _counter_value(name: str, labels: dict[str, str] | None = None) -> float:
 	value = REGISTRY.get_sample_value(name, labels or {})
 	return value if value is not None else 0.0
 
@@ -33,7 +35,7 @@ class _BatchBroker(BaseMessageBroker):
 	"""Yields a fixed batch of messages, then blocks forever (like a real
 	idle consumer) so the loop stays alive until the test cancels it."""
 
-	def __init__(self, messages: list) -> None:
+	def __init__(self, messages: list[dict[str, Any]]) -> None:
 		self._messages = messages
 
 	async def start(self) -> None:
@@ -45,22 +47,22 @@ class _BatchBroker(BaseMessageBroker):
 	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
 		...
 
-	def start_consuming(self, topic: str):
+	def start_consuming(self, topic: str) -> AsyncIterator[dict[str, Any]]:
 		return self._consume()
 
-	async def _consume(self):
+	async def _consume(self) -> AsyncIterator[dict[str, Any]]:
 		for message in self._messages:
 			yield message
 		await asyncio.Event().wait()  # block forever — never raises
 
-	def stop_consuming(self):
+	def stop_consuming(self) -> None:
 		pass
 
 
 @pytest.mark.asyncio
-async def test_consumer_loop_counts_consumed_published_malformed():
+async def test_consumer_loop_counts_consumed_published_malformed() -> None:
 	# 2 valid + 1 malformed → consumed == 3, published == 2, malformed == 1.
-	messages = [
+	messages: list[dict[str, Any]] = [
 		{'chat_oid': 'c1', 'message_text': 'hello'},
 		{'chat_oid': 'c2', 'message_text': 'world'},
 		{'no_chat_oid': True},  # malformed — must be counted, not published
@@ -107,7 +109,7 @@ async def test_consumer_loop_counts_consumed_published_malformed():
 
 
 @pytest.mark.asyncio
-async def test_consumer_loop_counts_errors_without_dying():
+async def test_consumer_loop_counts_errors_without_dying() -> None:
 	# A mediator failure must increment the error counter, log, and keep the
 	# loop alive for the next message.
 	messages = [
@@ -165,43 +167,53 @@ class _BlockingBroker(BaseMessageBroker):
 	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
 		...
 
-	def start_consuming(self, topic: str):
+	def start_consuming(self, topic: str) -> AsyncIterator[dict[str, Any]]:
 		return self._consume()
 
-	async def _consume(self):
-		await asyncio.Event().wait()  # block forever — never raises
+	# NOTE: not `async def` — an async-generator function returns the iterator
+	# synchronously; declaring it async makes it a coroutine (matches mypy's
+	# async-iterator guidance).
+	def _consume(self) -> AsyncIterator[dict[str, Any]]:
+		return self._aiter()
 
-	def stop_consuming(self):
+	async def _aiter(self) -> AsyncIterator[dict[str, Any]]:
+		await asyncio.Event().wait()  # block forever — never raises
+		yield {}  # pragma: no cover — unreachable, keeps this an async generator
+
+	def stop_consuming(self) -> None:
 		pass
 
 
 class _CrashingBroker(_BlockingBroker):
 	"""Consumer whose iterator dies immediately with an exception."""
 
-	async def _consume(self):
+	def _consume(self) -> AsyncIterator[dict[str, Any]]:
+		return self._aiter()
+
+	async def _aiter(self) -> AsyncIterator[dict[str, Any]]:
 		raise RuntimeError('consumer crashed')
-		yield  # pragma: no cover — makes this an async generator
+		yield {}  # pragma: no cover — makes this an async generator
 
 
 # --- reconnect / backoff helpers (O-1) ---------------------------------------
 
 
-async def _crash_stream():
+async def _crash_stream() -> AsyncIterator[dict[str, Any]]:
 	raise RuntimeError('kafka down')
-	yield  # pragma: no cover — makes this an async generator
+	yield {}  # pragma: no cover — makes this an async generator
 
 
-async def _msg_then_crash_stream(text: str):
+async def _msg_then_crash_stream(text: str) -> AsyncIterator[dict[str, Any]]:
 	yield {'chat_oid': 'c1', 'message_text': text}
 	raise RuntimeError('kafka down after message')
 
 
-async def _msg_then_clean_exit_stream(text: str):
+async def _msg_then_clean_exit_stream(text: str) -> AsyncIterator[dict[str, Any]]:
 	yield {'chat_oid': 'c1', 'message_text': text}
 	# Clean return — the O-1 case: no exception, but the stream ended.
 
 
-async def _msg_then_block_stream(text: str):
+async def _msg_then_block_stream(text: str) -> AsyncIterator[dict[str, Any]]:
 	yield {'chat_oid': 'c1', 'message_text': text}
 	await asyncio.Event().wait()  # block forever — never raises
 
@@ -212,7 +224,7 @@ class _ScriptedBroker(BaseMessageBroker):
 	so tests can await that instead of polling with asyncio.sleep (which would
 	interleave with the monkeypatched sleep under measurement)."""
 
-	def __init__(self, streams: list) -> None:
+	def __init__(self, streams: list[Any]) -> None:
 		self._streams = list(streams)
 		self.calls = 0
 		self.exhausted = asyncio.Event()
@@ -229,7 +241,7 @@ class _ScriptedBroker(BaseMessageBroker):
 	def stop_consuming(self) -> None:
 		...
 
-	def start_consuming(self, topic: str):
+	def start_consuming(self, topic: str) -> AsyncIterator[dict[str, Any]]:
 		self.calls += 1
 		if self._streams:
 			stream = self._streams.pop(0)
@@ -237,13 +249,17 @@ class _ScriptedBroker(BaseMessageBroker):
 				# The last stream always blocks forever by construction, so no
 				# further start_consuming call would ever fire the event.
 				self.exhausted.set()
-			return stream()
+			stream_iter: AsyncIterator[dict[str, Any]] = stream()
+			return stream_iter
 		self.exhausted.set()
 		return self._block()
 
-	async def _block(self):
+	def _block(self) -> AsyncIterator[dict[str, Any]]:
+		return self._block_aiter()
+
+	async def _block_aiter(self) -> AsyncIterator[dict[str, Any]]:
 		await asyncio.Event().wait()
-		yield  # pragma: no cover — unreachable, keeps this an async generator
+		yield {}  # pragma: no cover — unreachable, keeps this an async generator
 
 
 def _fake_config() -> SimpleNamespace:
@@ -255,20 +271,27 @@ def _fake_config() -> SimpleNamespace:
 
 
 class FakeContainer:
-	def __init__(self, mapping):
+	def __init__(self, mapping: dict[type[Any], Any]) -> None:
 		self._mapping = mapping
 
-	def __call__(self):
+	def __call__(self) -> 'FakeContainer':
 		return self
 
-	def resolve(self, cls):
+	def resolve(self, cls: type[Any]) -> Any:
 		return self._mapping[cls]
 
-	def register(self, service=None, factory=None, instance=None, scope=None, **kwargs):
+	def register(
+		self,
+		service: type[Any] | None = None,
+		factory: Any = None,
+		instance: Any = None,
+		scope: Any = None,
+		**kwargs: Any,
+	) -> None:
 		pass
 
 
-def _app_with(mapping):
+def _app_with(mapping: dict[type[Any], Any]) -> Any:
 	from fastapi import FastAPI
 
 	from logic.init import init_container
@@ -279,7 +302,7 @@ def _app_with(mapping):
 
 
 @pytest.mark.asyncio
-async def test_consumer_heartbeat_transitions_on_start_and_stop():
+async def test_consumer_heartbeat_transitions_on_start_and_stop() -> None:
 	from logic.mediator.base import Mediator
 	from settings.config import Config
 
@@ -303,7 +326,7 @@ async def test_consumer_heartbeat_transitions_on_start_and_stop():
 
 
 @pytest.mark.asyncio
-async def test_consumer_loop_survives_crash_and_reconnects():
+async def test_consumer_loop_survives_crash_and_reconnects() -> None:
 	# O-1: a stream crash must NOT kill the loop. The task stays alive, counts
 	# reconnects, and keeps the heartbeat up; only stop_kafka_consumer drops it.
 	from logic.mediator.base import Mediator
@@ -335,7 +358,7 @@ async def test_consumer_loop_survives_crash_and_reconnects():
 
 
 @pytest.mark.asyncio
-async def test_heartbeat_drops_on_clean_task_exit():
+async def test_heartbeat_drops_on_clean_task_exit() -> None:
 	# O-1: the done-callback must clear the heartbeat for ANY non-cancelled
 	# completion — including a clean return. The old code dropped it only on
 	# exceptions, so a cleanly-exited loop looked "up" while consuming nothing.
@@ -357,7 +380,7 @@ async def test_heartbeat_drops_on_clean_task_exit():
 
 
 @pytest.mark.asyncio
-async def test_consumer_loop_reconnects_after_clean_stream_exit():
+async def test_consumer_loop_reconnects_after_clean_stream_exit() -> None:
 	# O-1: a clean iterator exit must trigger a reconnect — the second stream
 	# (a fresh start_consuming call) delivers another message.
 	mediator = AsyncMock()
@@ -392,13 +415,13 @@ async def test_consumer_loop_reconnects_after_clean_stream_exit():
 
 
 @pytest.mark.asyncio
-async def test_backoff_grows_and_caps(monkeypatch):
+async def test_backoff_grows_and_caps(monkeypatch: pytest.MonkeyPatch) -> None:
 	# Successive reconnects double the delay up to backoff_max. asyncio.sleep is
 	# spied (delegating to the real sleep, capped) to capture the delays.
 	real_sleep = asyncio.sleep
 	delays: list[float] = []
 
-	async def spy_sleep(delay, *args, **kwargs):
+	async def spy_sleep(delay: float, *args: Any, **kwargs: Any) -> None:
 		delays.append(delay)
 		await real_sleep(min(delay, 0.01))
 
@@ -429,13 +452,13 @@ async def test_backoff_grows_and_caps(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_backoff_resets_after_successful_message(monkeypatch):
+async def test_backoff_resets_after_successful_message(monkeypatch: pytest.MonkeyPatch) -> None:
 	# Receiving a message resets the backoff: crash (sleep 0.1) → message (reset)
 	# → crash again must sleep 0.1 again, NOT the doubled 0.2.
 	real_sleep = asyncio.sleep
 	delays: list[float] = []
 
-	async def spy_sleep(delay, *args, **kwargs):
+	async def spy_sleep(delay: float, *args: Any, **kwargs: Any) -> None:
 		delays.append(delay)
 		await real_sleep(min(delay, 0.01))
 

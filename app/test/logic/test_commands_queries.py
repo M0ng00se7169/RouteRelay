@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
@@ -6,6 +8,7 @@ from domain.entities.messages import (
     Chat,
     ChatListener,
 )
+from domain.events.base import BaseEvent
 from domain.values.messages import Title
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.session import SessionProvider
@@ -24,11 +27,12 @@ from logic.commands.messages import (
     DeleteChatCommand,
     DeleteChatCommandHandler,
 )
+from logic.events.base import EventHandler
 from logic.exceptions.messages import (
     ChatNotFoundException,
     ChatWithThatTitleAlreadyExistsException,
 )
-from logic.mediator.base import EventMediator
+from logic.mediator.event import EventMediator
 from logic.queries.messages import (
     GetAllChatsListenersQuery,
     GetAllChatsListenersQueryHandler,
@@ -39,27 +43,31 @@ from logic.queries.messages import (
 )
 
 
-class FakeMediator(EventMediator):
+class FakeMediator(EventMediator[BaseEvent, Any]):
     def __init__(self) -> None:
         self.published: list[object] = []
 
-    def register_event(self, event, event_handlers=None) -> None:
+    def register_event(
+        self,
+        event: type[BaseEvent],
+        event_handlers: Iterable[EventHandler[BaseEvent, Any]] | None = None,
+    ) -> None:
         pass
 
-    async def publish(self, events):
+    async def publish(self, events: Iterable[BaseEvent]) -> list[Any]:
         self.published.extend(list(events))
         return []
 
 
 class NoopSessionProvider(SessionProvider):
-    def __init__(self):
+    def __init__(self) -> None:
         self.calls = 0
 
-    async def __call__(self):
+    async def __call__(self) -> None:
         self.calls += 1
 
 
-def _chat_repo_with(title='room'):
+def _chat_repo_with(title: str = 'room') -> tuple[MemoryChatRepository, Chat]:
     repo = MemoryChatRepository()
     chat = Chat.create_chat(title=Title(title))
     repo._saved_chats.append(chat)
@@ -67,7 +75,7 @@ def _chat_repo_with(title='room'):
 
 
 @pytest.mark.asyncio
-async def test_create_chat_success():
+async def test_create_chat_success() -> None:
     mediator = FakeMediator()
     handler = CreateChatCommandHandler(
         _mediator=mediator,
@@ -83,7 +91,7 @@ async def test_create_chat_success():
 
 
 @pytest.mark.asyncio
-async def test_create_chat_duplicate_raises():
+async def test_create_chat_duplicate_raises() -> None:
     mediator = FakeMediator()
     repo = MemoryChatRepository()
     repo._saved_chats.append(Chat.create_chat(title=Title('dup')))
@@ -100,7 +108,7 @@ async def test_create_chat_duplicate_raises():
 
 
 @pytest.mark.asyncio
-async def test_create_message_success():
+async def test_create_message_success() -> None:
     mediator = FakeMediator()
     repo, chat = _chat_repo_with()
     messages_repo = AsyncMock()
@@ -123,7 +131,7 @@ async def test_create_message_success():
 
 
 @pytest.mark.asyncio
-async def test_create_message_chat_not_found_raises():
+async def test_create_message_chat_not_found_raises() -> None:
     mediator = FakeMediator()
     handler = CreateMessageCommandHandler(
         _mediator=mediator,
@@ -138,7 +146,7 @@ async def test_create_message_chat_not_found_raises():
 
 
 @pytest.mark.asyncio
-async def test_delete_chat_success():
+async def test_delete_chat_success() -> None:
     mediator = FakeMediator()
     repo, chat = _chat_repo_with()
 
@@ -156,7 +164,7 @@ async def test_delete_chat_success():
 
 
 @pytest.mark.asyncio
-async def test_delete_chat_not_found_raises():
+async def test_delete_chat_not_found_raises() -> None:
     mediator = FakeMediator()
     handler = DeleteChatCommandHandler(
         _mediator=mediator,
@@ -170,7 +178,7 @@ async def test_delete_chat_not_found_raises():
 
 
 @pytest.mark.asyncio
-async def test_add_telegram_listener_success():
+async def test_add_telegram_listener_success() -> None:
     mediator = FakeMediator()
     repo, chat = _chat_repo_with()
 
@@ -189,7 +197,7 @@ async def test_add_telegram_listener_success():
 
 
 @pytest.mark.asyncio
-async def test_add_telegram_listener_chat_not_found_raises():
+async def test_add_telegram_listener_chat_not_found_raises() -> None:
     mediator = FakeMediator()
     handler = AddTelegramListenerCommandHandler(
         _mediator=mediator,
@@ -203,7 +211,7 @@ async def test_add_telegram_listener_chat_not_found_raises():
 
 
 @pytest.mark.asyncio
-async def test_get_chat_detail_query():
+async def test_get_chat_detail_query() -> None:
     repo, chat = _chat_repo_with()
     handler = GetChatDetailQueryHandler(
         chats_repository=repo, messages_repository=MemoryMessagesRepository(),
@@ -215,7 +223,7 @@ async def test_get_chat_detail_query():
 
 
 @pytest.mark.asyncio
-async def test_get_all_chats_listeners_query():
+async def test_get_all_chats_listeners_query() -> None:
     repo, chat = _chat_repo_with()
     await repo.add_telegram_listener(chat.oid, 'tg-9')
     handler = GetAllChatsListenersQueryHandler(chats_repository=repo)
@@ -226,7 +234,7 @@ async def test_get_all_chats_listeners_query():
 
 
 @pytest.mark.asyncio
-async def test_get_all_chats_listeners_query_unknown_chat_raises():
+async def test_get_all_chats_listeners_query_unknown_chat_raises() -> None:
     handler = GetAllChatsListenersQueryHandler(chats_repository=MemoryChatRepository())
 
     with pytest.raises(ChatNotFoundException):
@@ -234,7 +242,7 @@ async def test_get_all_chats_listeners_query_unknown_chat_raises():
 
 
 @pytest.mark.asyncio
-async def test_get_messages_query():
+async def test_get_messages_query() -> None:
     messages_repo = AsyncMock()
     messages_repo.get_messages = AsyncMock(return_value=([], 0))
     handler = GetMessagesQueryHandler(messages_repository=messages_repo)
@@ -249,22 +257,22 @@ async def test_get_messages_query():
 
 
 @pytest.mark.asyncio
-async def test_maybe_transaction_starts_transaction_when_session_returned():
+async def test_maybe_transaction_starts_transaction_when_session_returned() -> None:
     class FakeSession:
-        def start_transaction(self):
+        def start_transaction(self) -> 'FakeSession':
             return self
 
-        async def __aenter__(self):
+        async def __aenter__(self) -> 'FakeSession':  # noqa: PYI034 — mirrors the motor session API in the test
             return self
 
-        async def __aexit__(self, *a):
+        async def __aexit__(self, *a: object) -> bool:
             return False
 
     class FakeSessionProvider(SessionProvider):
         def __init__(self, session: FakeSession) -> None:
             self._session = session
 
-        async def __call__(self):
+        async def __call__(self) -> Any:
             return self._session
 
     from logic.commands.messages import _maybe_transaction
@@ -274,7 +282,7 @@ async def test_maybe_transaction_starts_transaction_when_session_returned():
 
 
 @pytest.mark.asyncio
-async def test_maybe_transaction_yields_none_when_provider_returns_none():
+async def test_maybe_transaction_yields_none_when_provider_returns_none() -> None:
     from logic.commands.messages import _maybe_transaction
 
     async with _maybe_transaction(NoopSessionProvider()) as session:

@@ -3,7 +3,10 @@ import logging
 
 from fastapi import FastAPI
 from httpx import AsyncClient
-from punq import Scope
+from punq import (
+    Container,
+    Scope,
+)
 
 from domain.events.messages import NewMessageReceivedFromBrokerEvent
 from infrastructure.message_brokers.base import BaseMessageBroker
@@ -32,23 +35,25 @@ def close_http_client(client: 'AsyncClient') -> None:
     asyncio.create_task(client.aclose())
 
 
-def _active_container(app: FastAPI | None = None):
+def _active_container(app: FastAPI | None = None) -> Container:
     # Tests install `init_container` in `app.dependency_overrides` (see
     # `app/test/application/api/conftest.py`) to swap Mongo/Kafka for in-memory
     # doubles. Honour that override here so the broker + relay started in the
     # lifespan also use the test doubles — otherwise the relay would resolve the
     # real Kafka broker and the production Mongo outbox repository.
     if app is not None and init_container in app.dependency_overrides:
-        return app.dependency_overrides[init_container]()
+        override = app.dependency_overrides[init_container]
+        container: Container = override()
+        return container
     return init_container()
 
 
-async def init_message_broker(app: FastAPI | None = None):
+async def init_message_broker(app: FastAPI | None = None) -> None:
     container = _active_container(app)
     message_broker: BaseMessageBroker = container.resolve(BaseMessageBroker)
     await message_broker.start()
 
-    def init_http_client_factory():
+    def init_http_client_factory() -> AsyncClient:
         return AsyncClient()
 
     container.register(AsyncClient, factory=init_http_client_factory, scope=Scope.singleton)
@@ -60,19 +65,19 @@ async def init_message_broker(app: FastAPI | None = None):
     container.register(TelegramNotificationClient, scope=Scope.singleton)
 
 
-async def close_message_broker(app: FastAPI | None = None):
+async def close_message_broker(app: FastAPI | None = None) -> None:
     container = _active_container(app)
     message_broker: BaseMessageBroker = container.resolve(BaseMessageBroker)
     await message_broker.close()
 
 
-async def start_relay(app: FastAPI | None = None) -> asyncio.Task:
+async def start_relay(app: FastAPI | None = None) -> asyncio.Task[None]:
     container = _active_container(app)
     relay: OutboxRelay = container.resolve(OutboxRelay)
     return asyncio.create_task(relay.run(), name='outbox-relay')
 
 
-async def stop_relay(task: asyncio.Task | None) -> None:
+async def stop_relay(task: asyncio.Task[None] | None) -> None:
     if task is None:
         return
     task.cancel()
@@ -143,7 +148,7 @@ async def _kafka_consumer_loop(
 			backoff = min(backoff * 2, backoff_max)
 
 
-async def start_kafka_consumer(app: FastAPI | None = None) -> asyncio.Task:
+async def start_kafka_consumer(app: FastAPI | None = None) -> asyncio.Task[None]:
     container = _active_container(app)
     broker: BaseMessageBroker = container.resolve(BaseMessageBroker)
     mediator = container.resolve(Mediator)
@@ -169,7 +174,7 @@ async def start_kafka_consumer(app: FastAPI | None = None) -> asyncio.Task:
     return task
 
 
-def _drop_consumer_heartbeat_if_dead(task: asyncio.Task) -> None:
+def _drop_consumer_heartbeat_if_dead(task: asyncio.Task[None]) -> None:
     # Graceful shutdown cancels the task — the stop path has already set the
     # gauge to 0, and re-setting it here is harmless. Any OTHER completion (an
     # exception OR a clean return) must clear the heartbeat: a finished loop
@@ -180,7 +185,7 @@ def _drop_consumer_heartbeat_if_dead(task: asyncio.Task) -> None:
         safe_set(kafka_consumer_up, 0)
 
 
-async def stop_kafka_consumer(task: asyncio.Task, app: FastAPI | None = None) -> None:
+async def stop_kafka_consumer(task: asyncio.Task[None], app: FastAPI | None = None) -> None:
     safe_set(kafka_consumer_up, 0)
     if task is None:
         return

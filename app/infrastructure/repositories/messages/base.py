@@ -4,6 +4,7 @@ from abc import (
 )
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import Any
 
 from domain.entities.messages import (
     Chat,
@@ -14,6 +15,12 @@ from infrastructure.repositories.filters.messages import (
     GetAllChatsFilters,
     GetMessagesFilters,
 )
+
+# Transactions are optional: the test session provider returns None, and the
+# Mongo one hands out motor client sessions (see infrastructure/outbox/session.py).
+# Repositories only forward the session to motor, so the base signatures keep it
+# deliberately loose (Any) — the concrete Mongo implementation narrows it.
+SessionHint = Any
 
 
 @dataclass
@@ -28,7 +35,7 @@ class BaseChatsRepository(ABC):
         ...
 
     @abstractmethod
-    async def add_chat(self, chat: Chat, session=None) -> None:
+    async def add_chat(self, chat: Chat, session: SessionHint | None = None) -> None:
         ...
 
     @abstractmethod
@@ -36,11 +43,16 @@ class BaseChatsRepository(ABC):
         ...
 
     @abstractmethod
-    async def delete_chat_by_oid(self, chat_oid: str, session=None) -> None:
+    async def delete_chat_by_oid(self, chat_oid: str, session: SessionHint | None = None) -> None:
         ...
 
     @abstractmethod
-    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str, session=None) -> None:
+    async def add_telegram_listener(
+        self,
+        chat_oid: str,
+        telegram_chat_id: str,
+        session: SessionHint | None = None,
+    ) -> None:
         ...
 
     @abstractmethod
@@ -52,7 +64,7 @@ class BaseChatsRepository(ABC):
 class BaseMessagesRepository(ABC):
 
     @abstractmethod
-    async def add_message(self, message: Message, session=None) -> None:
+    async def add_message(self, message: Message, session: SessionHint | None = None) -> None:
         ...
 
     @abstractmethod

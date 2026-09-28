@@ -1,4 +1,6 @@
+from collections.abc import AsyncIterator
 from datetime import datetime
+from typing import Any
 from unittest.mock import (
     AsyncMock,
     MagicMock,
@@ -42,7 +44,7 @@ def _make_message(chat_oid: str, text: str = 'hi') -> Message:
 
 
 @pytest.mark.asyncio
-async def test_memory_add_and_get_chat():
+async def test_memory_add_and_get_chat() -> None:
     repo = MemoryChatRepository()
     chat = _make_chat()
     await repo.add_chat(chat)
@@ -53,14 +55,14 @@ async def test_memory_add_and_get_chat():
 
 
 @pytest.mark.asyncio
-async def test_memory_get_missing_chat_returns_none():
+async def test_memory_get_missing_chat_returns_none() -> None:
     repo = MemoryChatRepository()
 
     assert await repo.get_chat_by_oid('missing') is None
 
 
 @pytest.mark.asyncio
-async def test_memory_check_exists_by_title():
+async def test_memory_check_exists_by_title() -> None:
     repo = MemoryChatRepository()
     await repo.add_chat(_make_chat('alpha'))
 
@@ -69,7 +71,7 @@ async def test_memory_check_exists_by_title():
 
 
 @pytest.mark.asyncio
-async def test_memory_get_all_chats_paginates():
+async def test_memory_get_all_chats_paginates() -> None:
     repo = MemoryChatRepository()
     for name in ['a', 'b', 'c']:
         await repo.add_chat(_make_chat(name))
@@ -82,7 +84,7 @@ async def test_memory_get_all_chats_paginates():
 
 
 @pytest.mark.asyncio
-async def test_memory_delete_chat():
+async def test_memory_delete_chat() -> None:
     repo = MemoryChatRepository()
     chat = _make_chat()
     await repo.add_chat(chat)
@@ -93,7 +95,7 @@ async def test_memory_delete_chat():
 
 
 @pytest.mark.asyncio
-async def test_memory_add_telegram_listener_attaches():
+async def test_memory_add_telegram_listener_attaches() -> None:
     repo = MemoryChatRepository()
     chat = _make_chat()
     await repo.add_chat(chat)
@@ -105,7 +107,7 @@ async def test_memory_add_telegram_listener_attaches():
 
 
 @pytest.mark.asyncio
-async def test_memory_add_telegram_listener_missing_chat_is_noop():
+async def test_memory_add_telegram_listener_missing_chat_is_noop() -> None:
     repo = MemoryChatRepository()
 
     await repo.add_telegram_listener('ghost', 'tg-1')
@@ -116,21 +118,25 @@ async def test_memory_add_telegram_listener_missing_chat_is_noop():
 # --- MongoDBChatsRepository (mocked Motor) --------------------------------
 
 
-def _mock_mongo_collection(find_one=None, find_cursor=(), count=0):
+def _mock_mongo_collection(
+    find_one: dict[str, Any] | None = None,
+    find_cursor: Any = (),
+    count: int = 0,
+) -> MagicMock:
     collection = MagicMock()
 
     class _Cursor:
-        def __init__(self, docs):
+        def __init__(self, docs: list[dict[str, Any]]) -> None:
             self._docs = docs
 
-        def skip(self, *a, **k):
+        def skip(self, *a: Any, **k: Any) -> '_Cursor':
             return self
 
-        def limit(self, *a, **k):
+        def limit(self, *a: Any, **k: Any) -> '_Cursor':
             return self
 
-        def __aiter__(self):
-            async def _gen():
+        def __aiter__(self) -> AsyncIterator[dict[str, Any]]:
+            async def _gen() -> AsyncIterator[dict[str, Any]]:
                 for doc in self._docs:
                     yield doc
             return _gen()
@@ -144,7 +150,7 @@ def _mock_mongo_collection(find_one=None, find_cursor=(), count=0):
     return collection
 
 
-def _mock_client(collection):
+def _mock_client(collection: MagicMock) -> MagicMock:
     # client[db_name][coll_name] -> collection
     db = MagicMock()
     db.__getitem__ = MagicMock(return_value=collection)
@@ -154,7 +160,7 @@ def _mock_client(collection):
 
 
 @pytest.mark.asyncio
-async def test_mongo_get_chat_by_oid_found():
+async def test_mongo_get_chat_by_oid_found() -> None:
     doc = {'oid': 'c1', 'title': 'hello', 'created_at': 't', 'listeners': ['tg-x']}
     collection = _mock_mongo_collection(find_one=doc)
     repo = MongoDBChatsRepository(
@@ -172,7 +178,7 @@ async def test_mongo_get_chat_by_oid_found():
 
 
 @pytest.mark.asyncio
-async def test_mongo_get_chat_by_oid_missing():
+async def test_mongo_get_chat_by_oid_missing() -> None:
     collection = _mock_mongo_collection(find_one=None)
     repo = MongoDBChatsRepository(
         mongo_db_client=_mock_client(collection),
@@ -184,7 +190,7 @@ async def test_mongo_get_chat_by_oid_missing():
 
 
 @pytest.mark.asyncio
-async def test_mongo_check_exists_by_title():
+async def test_mongo_check_exists_by_title() -> None:
     collection = _mock_mongo_collection(find_one={'title': 'hi'})
     repo = MongoDBChatsRepository(
         mongo_db_client=_mock_client(collection),
@@ -196,7 +202,7 @@ async def test_mongo_check_exists_by_title():
 
 
 @pytest.mark.asyncio
-async def test_mongo_add_chat_inserts_document():
+async def test_mongo_add_chat_inserts_document() -> None:
     collection = _mock_mongo_collection()
     repo = MongoDBChatsRepository(
         mongo_db_client=_mock_client(collection),
@@ -206,14 +212,14 @@ async def test_mongo_add_chat_inserts_document():
     session = object()
     chat = _make_chat('new')
 
-    await repo.add_chat(chat, session=session)
+    await repo.add_chat(chat, session=session)  # type: ignore[arg-type]
 
     collection.insert_one.assert_awaited_once()
     assert collection.insert_one.call_args.kwargs['session'] is session
 
 
 @pytest.mark.asyncio
-async def test_mongo_get_all_chats():
+async def test_mongo_get_all_chats() -> None:
     doc = {'oid': 'c1', 'title': 'hello', 'created_at': 't', 'listeners': []}
     collection = _mock_mongo_collection(find_cursor=[doc], count=1)
     repo = MongoDBChatsRepository(
@@ -230,7 +236,7 @@ async def test_mongo_get_all_chats():
 
 
 @pytest.mark.asyncio
-async def test_mongo_delete_chat():
+async def test_mongo_delete_chat() -> None:
     collection = _mock_mongo_collection()
     repo = MongoDBChatsRepository(
         mongo_db_client=_mock_client(collection),
@@ -244,7 +250,7 @@ async def test_mongo_delete_chat():
 
 
 @pytest.mark.asyncio
-async def test_mongo_add_telegram_listener():
+async def test_mongo_add_telegram_listener() -> None:
     collection = _mock_mongo_collection()
     repo = MongoDBChatsRepository(
         mongo_db_client=_mock_client(collection),
@@ -261,7 +267,7 @@ async def test_mongo_add_telegram_listener():
 
 
 @pytest.mark.asyncio
-async def test_mongo_get_all_chat_listeners():
+async def test_mongo_get_all_chat_listeners() -> None:
     doc = {'oid': 'c1', 'title': 't', 'created_at': 'x', 'listeners': ['tg-1', 'tg-2']}
     collection = _mock_mongo_collection(find_one=doc)
     repo = MongoDBChatsRepository(
@@ -279,7 +285,7 @@ async def test_mongo_get_all_chat_listeners():
 
 
 @pytest.mark.asyncio
-async def test_mongo_add_message():
+async def test_mongo_add_message() -> None:
     collection = _mock_mongo_collection()
     repo = MongoDBMessagesRepository(
         mongo_db_client=_mock_client(collection),
@@ -289,14 +295,14 @@ async def test_mongo_add_message():
     session = object()
     message = _make_message('c1', 'hello')
 
-    await repo.add_message(message, session=session)
+    await repo.add_message(message, session=session)  # type: ignore[arg-type]
 
     collection.insert_one.assert_awaited_once()
     assert collection.insert_one.call_args.kwargs['session'] is session
 
 
 @pytest.mark.asyncio
-async def test_mongo_get_messages():
+async def test_mongo_get_messages() -> None:
     doc = {'oid': 'm1', 'text': 'hi', 'created_at': 't', 'chat_oid': 'c1'}
     collection = _mock_mongo_collection(find_cursor=[doc], count=1)
     repo = MongoDBMessagesRepository(
@@ -313,7 +319,7 @@ async def test_mongo_get_messages():
 # --- Abstract contracts remain abstract ------------------------------------
 
 
-def test_base_repos_cannot_instantiate():
+def test_base_repos_cannot_instantiate() -> None:
     # Deliberate contract check: the bases stay abstract (all methods abstract).
     with pytest.raises(TypeError):
         BaseChatsRepository()  # type: ignore[abstract]

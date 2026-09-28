@@ -5,7 +5,7 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-28** · Tests: **217 passed, 0 warnings** (`cd app && uv run pytest`, ~6s) · mypy: **clean, 121 files** (`uv run mypy`) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest via uv, promtool/amtool, docker build)
+> Last updated: **2026-09-28** · Tests: **217 passed, 0 warnings** (`cd app && uv run pytest`, ~6s) · mypy: **FULL STRICT clean, 121 files** (`uv run mypy` from repo root — files=["app"] is root-relative) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest via uv, promtool/amtool, docker build) — mypy not in CI yet (user decision pending)
 
 ---
 
@@ -80,6 +80,29 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-28 — mypy switched to FULL `strict = true` (local-only, all 509 initial errors fixed at the root).**
+  pyproject `[tool.mypy]`: `strict = true` + `disallow_any_generics`/`disallow_subclassing_any`/
+  `disallow_any_unimported` (user decision: NO test overrides — tests fully annotated too). 509
+  errors in 59 files → 0. Key fixes: **motor generics parameterized** `AgnosticClient[AgnosticCollection][dict[str, Any]]`,
+  `AsyncIOMotorClient[dict[str, Any]]` (motor ships .pyi stubs, is Generic); **aiokafka has no stubs** →
+  `disallow_any_unimported` forbids its names in annotations, so `KafkaMessageBroker.producer/consumer`
+  are typed `Any` at that single boundary (comment explains); **kafka.stop_consuming made SYNC** `-> None`
+  (was `async def` — never matched the ABC; 2 tests updated to plain calls); `breaker.call()` generic
+  over `_T` (kills the proxies' Any-returns); breaker proxies' `inner` typed as the repo ABCs (not Any);
+  repo `session=None` params typed (`SessionHint=Any` in messages/base.py, real
+  `AsyncIOMotorClientSession` in mongo repos); `EventMediator` imported from `logic.mediator.event`,
+  `NewMessageReceivedFromBrokerEvent` from `domain.events.messages` (strict no_implicit_reexport);
+  `BaseCommand`/`CommandHandler._mediator` typed `EventMediator[BaseEvent, Any]`; `lifespan` ->
+  `AsyncIterator[None]`, tasks `asyncio.Task[None]`; `encode_token/create_token` -> `dict[str, Any]`,
+  `verify_token` runtime-checks `sub` is str; `PrometheusFastApiInstrumentator` imported from
+  `.instrumentation` (same re-export issue). Test files: fake containers/streams annotated, async
+  generators fixed to sync-def-returning-iterator pattern (mypy async-iterator guidance), duck-typed
+  repo stubs bridged with `cast()` + one `# type: ignore[attr-defined]`/`[call-overload]` each for
+  punq `_singletons` internals and module patching (noqa B010 where setattr). GOTCHAS: (1) `uv run
+  mypy` must run from REPO ROOT (files=["app"]); (2) str_replace with old strings spanning a
+  line-boundary comment can swallow a newline — always re-read edited hunks; (3) ruff RUF100 moved
+  noqa TRY004 must sit on the `raise` line, not the `if`. Verified: mypy clean (121 files), 217
+  passed, ruff clean on all 60 changed files, `uv lock --check` fresh, `create_app()` boots.
 - **2026-09-28 — Migration Poetry → uv (local + Dockerfile + CI).** pyproject: `[tool.poetry]`
   package-mode block dropped; NO `[build-system]` (application repo — `uv sync` manages deps only);
   `.python-version` = `3.12` added (the single pin uv reads everywhere). `uv.lock` (74 pkgs)

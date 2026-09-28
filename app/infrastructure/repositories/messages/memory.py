@@ -2,6 +2,7 @@ from dataclasses import (
     dataclass,
     field,
 )
+from typing import Any
 
 from domain.entities.messages import (
     Chat,
@@ -40,21 +41,21 @@ class MemoryChatRepository(BaseChatsRepository):
         except StopIteration:
             return False
 
-    async def add_chat(self, chat: Chat, session=None) -> None:
+    async def add_chat(self, chat: Chat, session: Any | None = None) -> None:
         self._saved_chats.append(chat)
 
     async def get_all_chats(self, filters: GetAllChatsFilters) -> tuple[list[Chat], int]:
         chats = self._saved_chats[filters.offset:filters.offset + filters.limit]
         return chats, len(self._saved_chats)
 
-    async def delete_chat_by_oid(self, chat_oid: str, session=None) -> None:
+    async def delete_chat_by_oid(self, chat_oid: str, session: Any | None = None) -> None:
         self._saved_chats = [chat for chat in self._saved_chats if chat.oid != chat_oid]
 
     async def add_telegram_listener(
         self,
         chat_oid: str,
         telegram_chat_id: str,
-        session=None,
+        session: Any | None = None,
     ) -> None:
         chat = await self.get_chat_by_oid(oid=chat_oid)
         if chat is None:
@@ -87,7 +88,7 @@ class MemoryChatRepository(BaseChatsRepository):
 class MemoryMessagesRepository(BaseMessagesRepository):
     _saved_messages: list[Message] = field(default_factory=list, kw_only=True)
 
-    async def add_message(self, message: Message, session=None) -> None:
+    async def add_message(self, message: Message, session: Any | None = None) -> None:
         self._saved_messages.append(message)
 
     async def get_messages(

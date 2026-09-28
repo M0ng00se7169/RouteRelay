@@ -23,32 +23,32 @@ from domain.values.messages import (
 )
 
 
-def test_title_valid():
+def test_title_valid() -> None:
     assert Title('room').as_generic_type() == 'room'
 
 
-def test_title_too_long_raises():
+def test_title_too_long_raises() -> None:
     with pytest.raises(TitleTooLongException):
         Title('x' * 300)
 
 
-def test_text_valid():
+def test_text_valid() -> None:
     assert Text('hi').as_generic_type() == 'hi'
 
 
-def test_text_empty_raises():
+def test_text_empty_raises() -> None:
     with pytest.raises(EmptyTextException):
         Text('')
 
 
-def test_chat_create_registers_event():
+def test_chat_create_registers_event() -> None:
     chat = Chat.create_chat(title=Title('room'))
 
     events = chat.pull_events()
     assert any(isinstance(e, NewChatCreatedEvent) for e in events)
 
 
-def test_chat_delete_registers_event():
+def test_chat_delete_registers_event() -> None:
     chat = Chat.create_chat(title=Title('room'))
 
     chat.delete()
@@ -57,7 +57,7 @@ def test_chat_delete_registers_event():
     assert any(isinstance(e, ChatDeletedEvent) for e in events)
 
 
-def test_chat_add_message_registers_event():
+def test_chat_add_message_registers_event() -> None:
     chat = Chat.create_chat(title=Title('room'))
     chat.pull_events()
 
@@ -67,7 +67,7 @@ def test_chat_add_message_registers_event():
     assert any(isinstance(e, NewMessageReceivedEvent) for e in events)
 
 
-def test_chat_add_listener_registers_event():
+def test_chat_add_listener_registers_event() -> None:
     chat = Chat.create_chat(title=Title('room'))
     chat.pull_events()
 
@@ -80,7 +80,7 @@ def test_chat_add_listener_registers_event():
     assert listener_event.listener_oid == 'tg-1'
 
 
-def test_chat_add_duplicate_listener_raises():
+def test_chat_add_duplicate_listener_raises() -> None:
     chat = Chat.create_chat(title=Title('room'))
     chat.add_listener(ChatListener(oid='tg-1'))
 
@@ -88,7 +88,7 @@ def test_chat_add_duplicate_listener_raises():
         chat.add_listener(ChatListener(oid='tg-1'))
 
 
-def test_application_exception_has_message():
+def test_application_exception_has_message() -> None:
     exc = EmptyTextException()
     assert isinstance(exc, ApplicationException)
     assert exc.message

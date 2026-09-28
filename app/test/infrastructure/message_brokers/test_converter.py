@@ -9,7 +9,7 @@ from domain.events.messages import (
 from infrastructure.message_brokers.converters import convert_event_to_broker_message
 
 
-def test_converter_roundtrip_new_chat_created():
+def test_converter_roundtrip_new_chat_created() -> None:
 	event = NewChatCreatedEvent(chat_oid='chat-1', chat_title='General')
 
 	payload = convert_event_to_broker_message(event)
@@ -22,7 +22,7 @@ def test_converter_roundtrip_new_chat_created():
 	assert decoded['event_id'] == str(event.event_id)
 
 
-def test_converter_roundtrip_new_message_received():
+def test_converter_roundtrip_new_message_received() -> None:
 	event = NewMessageReceivedEvent(
 		message_text='hi',
 		message_oid='msg-1',
@@ -38,7 +38,7 @@ def test_converter_roundtrip_new_message_received():
 	assert decoded['chat_oid'] == 'chat-1'
 
 
-def test_converter_roundtrip_chat_deleted():
+def test_converter_roundtrip_chat_deleted() -> None:
 	event = ChatDeletedEvent(chat_oid='chat-1')
 
 	payload = convert_event_to_broker_message(event)
@@ -49,7 +49,7 @@ def test_converter_roundtrip_chat_deleted():
 	assert decoded['chat_oid'] == 'chat-1'
 
 
-def test_converter_roundtrip_listener_added():
+def test_converter_roundtrip_listener_added() -> None:
 	event = ListenerAddedEvent(chat_oid='chat-1', listener_oid='listener-1')
 
 	payload = convert_event_to_broker_message(event)

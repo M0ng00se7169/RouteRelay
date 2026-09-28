@@ -8,5 +8,5 @@ class ListenerAlreadyExistsException(ApplicationException):
     listener_oid: str
 
     @property
-    def message(self):
+    def message(self) -> str:
         return 'Listener already listens this chat.'

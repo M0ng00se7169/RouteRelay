@@ -1,13 +1,14 @@
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 from dataclasses import dataclass
-from typing import TypeVar
+from typing import Any, TypeVar
 
 from domain.entities.messages import (
     Chat,
     ChatListener,
     Message,
 )
+from domain.events.base import BaseEvent
 from domain.values.messages import (
     Text,
     Title,
@@ -27,7 +28,7 @@ from logic.exceptions.messages import (
     ChatNotFoundException,
     ChatWithThatTitleAlreadyExistsException,
 )
-from logic.mediator.base import EventMediator
+from logic.mediator.event import EventMediator
 
 _T = TypeVar('_T')
 
@@ -72,7 +73,7 @@ class CreateChatCommand(BaseCommand):
 
 @dataclass
 class CreateChatCommandHandler(CommandHandler[CreateChatCommand, Chat]):
-    _mediator: EventMediator
+    _mediator: EventMediator[BaseEvent, Any]
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider
@@ -104,7 +105,7 @@ class CreateMessageCommand(BaseCommand):
 
 @dataclass
 class CreateMessageCommandHandler(CommandHandler[CreateMessageCommand, Message]):
-    _mediator: EventMediator
+    _mediator: EventMediator[BaseEvent, Any]
     messages_repository: BaseMessagesRepository
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
@@ -142,7 +143,7 @@ class DeleteChatCommand(BaseCommand):
 
 @dataclass
 class DeleteChatCommandHandler(CommandHandler[DeleteChatCommand, None]):
-    _mediator: EventMediator
+    _mediator: EventMediator[BaseEvent, Any]
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider
@@ -175,7 +176,7 @@ class AddTelegramListenerCommand(BaseCommand):
 
 @dataclass
 class AddTelegramListenerCommandHandler(CommandHandler[AddTelegramListenerCommand, ChatListener]):
-    _mediator: EventMediator
+    _mediator: EventMediator[BaseEvent, Any]
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider

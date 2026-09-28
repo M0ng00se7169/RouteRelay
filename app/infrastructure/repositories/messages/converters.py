@@ -14,7 +14,7 @@ from domain.values.messages import (
 )
 
 
-def convert_message_entity_to_document(message: Message) -> dict:
+def convert_message_entity_to_document(message: Message) -> dict[str, Any]:
     return {
         'oid': message.oid,
         'text': message.text.as_generic_type(),
@@ -23,7 +23,7 @@ def convert_message_entity_to_document(message: Message) -> dict:
     }
 
 
-def convert_chat_entity_to_document(chat: Chat) -> dict:
+def convert_chat_entity_to_document(chat: Chat) -> dict[str, Any]:
     return {
         'oid': chat.oid,
         'title': chat.title.as_generic_type(),

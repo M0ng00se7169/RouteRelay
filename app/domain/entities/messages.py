@@ -47,11 +47,11 @@ class Chat(BaseEntity):
 
         return new_chat
 
-    def delete(self):
+    def delete(self) -> None:
         self.is_deleted = True
         self.register_event(ChatDeletedEvent(chat_oid=self.oid))
 
-    def add_listener(self, listener: ChatListener):
+    def add_listener(self, listener: ChatListener) -> None:
         if listener in self.listeners:
             raise ListenerAlreadyExistsException(listener_oid=listener.oid)
 
@@ -62,7 +62,7 @@ class Chat(BaseEntity):
         listener = ChatListener(oid=telegram_chat_id)
         self.add_listener(listener)
 
-    def add_message(self, message: Message):
+    def add_message(self, message: Message) -> None:
         self.messages.add(message)
         self.register_event(
             NewMessageReceivedEvent(

@@ -22,11 +22,12 @@ def client() -> TestClient:
 def token(client: TestClient) -> str:
     resp = client.post('/auth/token', data={'username': 'admin', 'password': 'admin'})
     assert resp.status_code == 200, resp.text
-    return resp.json()['access_token']
+    access_token: str = resp.json()['access_token']
+    return access_token
 
 
 class TestTokenEndpoint:
-    def test_issue_token_for_valid_credentials(self, client: TestClient):
+    def test_issue_token_for_valid_credentials(self, client: TestClient) -> None:
         resp = client.post('/auth/token', data={'username': 'admin', 'password': 'admin'})
         assert resp.status_code == 200
         body = resp.json()
@@ -34,26 +35,26 @@ class TestTokenEndpoint:
         # JWT format: three dot-separated base64url segments
         assert body['access_token'].count('.') == 2
 
-    def test_rejects_wrong_password(self, client: TestClient):
+    def test_rejects_wrong_password(self, client: TestClient) -> None:
         resp = client.post('/auth/token', data={'username': 'admin', 'password': 'wrong'})
         assert resp.status_code == 422 or resp.status_code == 401
 
-    def test_rejects_unknown_user(self, client: TestClient):
+    def test_rejects_unknown_user(self, client: TestClient) -> None:
         resp = client.post('/auth/token', data={'username': 'nobody', 'password': 'admin'})
         assert resp.status_code == 401
 
-    def test_missing_form_returns_422(self, client: TestClient):
+    def test_missing_form_returns_422(self, client: TestClient) -> None:
         resp = client.post('/auth/token', data={})
         assert resp.status_code == 422
 
 
 class TestGetCurrentUserDependency:
-    def test_valid_token_authenticates(self, token: str):
+    def test_valid_token_authenticates(self, token: str) -> None:
         app = FastAPI()
         app.include_router(auth_router)
 
         @app.get('/whoami')
-        def whoami(user: str = Depends(get_current_user)):
+        def whoami(user: str = Depends(get_current_user)) -> dict[str, str]:
             return {'user': user}
 
         client = TestClient(app)
@@ -61,12 +62,12 @@ class TestGetCurrentUserDependency:
         assert resp.status_code == 200
         assert resp.json() == {'user': 'admin'}
 
-    def test_missing_token_returns_401(self):
+    def test_missing_token_returns_401(self) -> None:
         app = FastAPI()
         app.include_router(auth_router)
 
         @app.get('/whoami')
-        def whoami(user: str = Depends(get_current_user)):
+        def whoami(user: str = Depends(get_current_user)) -> dict[str, str]:
             return {'user': user}
 
         client = TestClient(app)
@@ -74,14 +75,14 @@ class TestGetCurrentUserDependency:
         assert resp.status_code == 401
         assert resp.headers['www-authenticate'] == 'Bearer'
 
-    def test_expired_token_returns_401(self):
+    def test_expired_token_returns_401(self) -> None:
         from infrastructure.serializers.jwt import encode_token
 
         app = FastAPI()
         app.include_router(auth_router)
 
         @app.get('/whoami')
-        def whoami(user: str = Depends(get_current_user)):
+        def whoami(user: str = Depends(get_current_user)) -> dict[str, str]:
             return {'user': user}
 
         client = TestClient(app)
@@ -93,12 +94,12 @@ class TestGetCurrentUserDependency:
         resp = client.get('/whoami', headers={'Authorization': f'Bearer {expired}'})
         assert resp.status_code == 401
 
-    def test_garbage_token_returns_401(self):
+    def test_garbage_token_returns_401(self) -> None:
         app = FastAPI()
         app.include_router(auth_router)
 
         @app.get('/whoami')
-        def whoami(user: str = Depends(get_current_user)):
+        def whoami(user: str = Depends(get_current_user)) -> dict[str, str]:
             return {'user': user}
 
         client = TestClient(app)

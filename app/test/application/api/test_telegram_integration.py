@@ -1,4 +1,5 @@
 import unittest.mock
+from typing import Any
 
 import pytest
 from prometheus_client import REGISTRY
@@ -41,7 +42,7 @@ class _SpyNotificationClient(BaseNotificationClient):
 
 
 @pytest.fixture
-def telegram_container():
+def telegram_container() -> tuple[Any, _SpyNotificationClient]:
     # Dummy container: in-memory repos/broker so no Mongo/Kafka is touched.
     container = init_dummy_container()
     spy = _SpyNotificationClient()
@@ -63,7 +64,9 @@ def telegram_container():
 
 
 @pytest.mark.asyncio
-async def test_listener_added_event_sends_telegram_notification(telegram_container):
+async def test_listener_added_event_sends_telegram_notification(
+	telegram_container: tuple[Any, _SpyNotificationClient],
+) -> None:
     _, spy = telegram_container
     handler = ListenerAddedEventHandler(
         message_broker=unittest.mock.MagicMock(),
@@ -81,7 +84,9 @@ async def test_listener_added_event_sends_telegram_notification(telegram_contain
 
 
 @pytest.mark.asyncio
-async def test_telegram_notification_failure_does_not_break_pipeline(telegram_container):
+async def test_telegram_notification_failure_does_not_break_pipeline(
+	telegram_container: tuple[Any, _SpyNotificationClient],
+) -> None:
     _, spy = telegram_container
     spy.fail = True
     handler = ListenerAddedEventHandler(
@@ -102,7 +107,7 @@ async def test_telegram_notification_failure_does_not_break_pipeline(telegram_co
 
 
 @pytest.mark.asyncio
-async def test_listener_added_event_without_client_is_noop():
+async def test_listener_added_event_without_client_is_noop() -> None:
     handler = ListenerAddedEventHandler(
         message_broker=unittest.mock.MagicMock(),
         connection_manager=unittest.mock.MagicMock(),
@@ -120,7 +125,9 @@ async def test_listener_added_event_without_client_is_noop():
 
 
 @pytest.mark.asyncio
-async def test_add_telegram_listener_command_publishes_event_and_notifies(telegram_container):
+async def test_add_telegram_listener_command_publishes_event_and_notifies(
+	telegram_container: tuple[Any, _SpyNotificationClient],
+) -> None:
     container, spy = telegram_container
     mediator: Mediator = container.resolve(Mediator)
 
@@ -140,7 +147,9 @@ async def test_add_telegram_listener_command_publishes_event_and_notifies(telegr
 
 
 @pytest.mark.asyncio
-async def test_add_telegram_listener_command_unknown_chat_raises(telegram_container):
+async def test_add_telegram_listener_command_unknown_chat_raises(
+	telegram_container: tuple[Any, _SpyNotificationClient],
+) -> None:
     container, _ = telegram_container
     mediator: Mediator = container.resolve(Mediator)
 

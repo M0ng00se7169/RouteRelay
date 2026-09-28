@@ -12,7 +12,7 @@ from infrastructure.integrations.notifications.dtos import Notification
 
 
 @pytest.mark.asyncio
-async def test_format_notification_includes_title_and_text():
+async def test_format_notification_includes_title_and_text() -> None:
     client = TelegramNotificationClient(
         bot_token='TOKEN',
         chat_id='123',
@@ -26,7 +26,7 @@ async def test_format_notification_includes_title_and_text():
 
 
 @pytest.mark.asyncio
-async def test_send_calls_telegram_api():
+async def test_send_calls_telegram_api() -> None:
     get_mock = AsyncMock(return_value=Response(200))
     http_client = AsyncMock(spec=AsyncClient)
     http_client.get = get_mock
@@ -49,6 +49,6 @@ async def test_send_calls_telegram_api():
 
 
 @pytest.mark.asyncio
-async def test_base_client_is_abstract():
+async def test_base_client_is_abstract() -> None:
     with pytest.raises(TypeError):
         BaseNotificationClient()  # type: ignore[abstract]

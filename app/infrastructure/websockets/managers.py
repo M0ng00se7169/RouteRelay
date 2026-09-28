@@ -33,19 +33,19 @@ class BaseConnectionManager(ABC):
     )
 
     @abstractmethod
-    async def accept_connection(self, websocket: WebSocket, key: str):
+    async def accept_connection(self, websocket: WebSocket, key: str) -> None:
         ...
 
     @abstractmethod
-    async def remove_connection(self, websocket: WebSocket, key: str):
+    async def remove_connection(self, websocket: WebSocket, key: str) -> None:
         ...
 
     @abstractmethod
-    async def send_all(self, key: str, bytes_: bytes):
+    async def send_all(self, key: str, bytes_: bytes) -> None:
         ...
 
     @abstractmethod
-    async def disconnect_all(self, key: str):
+    async def disconnect_all(self, key: str) -> None:
         ...
 
 
@@ -59,7 +59,7 @@ class ConnectionManager(BaseConnectionManager):
         # oids — unbounded, and per-key cardinality is forbidden (ADR-0006, D3).
         safe_set(ws_connections_active, sum(len(v) for v in self.connections_map.values()))
 
-    async def accept_connection(self, websocket: WebSocket, key: str):
+    async def accept_connection(self, websocket: WebSocket, key: str) -> None:
         await websocket.accept()
 
         if key not in self.lock_map:
@@ -70,7 +70,7 @@ class ConnectionManager(BaseConnectionManager):
             safe_inc(ws_connections_accepted_total)
             self._recompute_active_gauge()
 
-    async def remove_connection(self, websocket: WebSocket, key: str):
+    async def remove_connection(self, websocket: WebSocket, key: str) -> None:
         if key not in self.lock_map or key not in self.connections_map:
             return
         async with self.lock_map[key]:
@@ -81,7 +81,7 @@ class ConnectionManager(BaseConnectionManager):
                 safe_inc(ws_connections_removed_total)
                 self._recompute_active_gauge()
 
-    async def send_all(self, key: str, bytes_: bytes):
+    async def send_all(self, key: str, bytes_: bytes) -> None:
         # Fan-out is best-effort: one dead socket must not abort delivery to the
         # remaining sockets (behavior change vs. the previous unguarded loop —
         # flagged as a bug fix in ADR-0006, Chunk 4.1). Failures are counted per
@@ -102,7 +102,7 @@ class ConnectionManager(BaseConnectionManager):
                 perf_counter() - started_at,
             )
 
-    async def disconnect_all(self, key: str):
+    async def disconnect_all(self, key: str) -> None:
         if key not in self.lock_map or key not in self.connections_map:
             return
         async with self.lock_map[key]:

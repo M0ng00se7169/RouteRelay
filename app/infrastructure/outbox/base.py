@@ -1,9 +1,10 @@
 from abc import (
-    ABC,
-    abstractmethod,
+	ABC,
+	abstractmethod,
 )
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from domain.events.base import BaseEvent
 
@@ -23,7 +24,7 @@ class OutboxRow:
 @dataclass
 class BaseOutboxRepository(ABC):
 	@abstractmethod
-	async def save_events(self, events: list[BaseEvent], session=None) -> None:
+	async def save_events(self, events: list[BaseEvent], session: Any | None = None) -> None:
 		...
 
 	@abstractmethod

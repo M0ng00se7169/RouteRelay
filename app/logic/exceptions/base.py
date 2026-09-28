@@ -6,6 +6,6 @@ from domain.exceptions.base import ApplicationException
 @dataclass(eq=False)
 class LogicException(ApplicationException):
     @property
-    def message(self):
+    def message(self) -> str:
         return 'An error occurred in processing the request.'
 

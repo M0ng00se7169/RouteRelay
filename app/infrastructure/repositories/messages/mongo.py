@@ -1,6 +1,8 @@
 from dataclasses import dataclass
+from typing import Any
 
 from motor.core import AgnosticClient, AgnosticCollection
+from motor.motor_asyncio import AsyncIOMotorClientSession
 
 from domain.entities.messages import (
     Chat,
@@ -23,15 +25,22 @@ from infrastructure.repositories.messages.converters import (
     convert_message_entity_to_document,
 )
 
+# Sessions are produced by the outbox SessionProvider (infrastructure/outbox/session.py):
+# motor's start_session() returns an AsyncIOMotorClientSession. Repositories accept
+# it only to forward it to motor calls, so the loose alias keeps signatures readable.
+SessionProviderSession = AsyncIOMotorClientSession
+
 
 @dataclass
 class BaseMongoDBRepository:
-    mongo_db_client: AgnosticClient
+    # Parameterized with the loose document type (dict[str, Any]): collections
+    # store heterogeneous chat/message documents and converters take Mapping[str, Any].
+    mongo_db_client: AgnosticClient[dict[str, Any]]
     mongo_db_db_name: str
     mongo_db_collection_name: str
 
     @property
-    def _collection(self) -> AgnosticCollection:
+    def _collection(self) -> AgnosticCollection[dict[str, Any]]:
         return self.mongo_db_client[self.mongo_db_db_name][self.mongo_db_collection_name]
 
 
@@ -49,7 +58,7 @@ class MongoDBChatsRepository(BaseChatsRepository, BaseMongoDBRepository):
     async def check_chat_exists_by_title(self, title: str) -> bool:
         return bool(await self._collection.find_one(filter={'title': title}))
 
-    async def add_chat(self, chat: Chat, session=None) -> None:
+    async def add_chat(self, chat: Chat, session: SessionProviderSession | None = None) -> None:
         await self._collection.insert_one(convert_chat_entity_to_document(chat), session=session)
 
     async def get_all_chats(self, filters: GetAllChatsFilters) -> tuple[list[Chat], int]:
@@ -64,10 +73,19 @@ class MongoDBChatsRepository(BaseChatsRepository, BaseMongoDBRepository):
 
         return chats, count
 
-    async def delete_chat_by_oid(self, chat_oid: str, session=None) -> None:
+    async def delete_chat_by_oid(
+        self,
+        chat_oid: str,
+        session: SessionProviderSession | None = None,
+    ) -> None:
         await self._collection.delete_one({'oid': chat_oid}, session=session)
 
-    async def add_telegram_listener(self, chat_oid: str, telegram_chat_id: str, session=None) -> None:
+    async def add_telegram_listener(
+        self,
+        chat_oid: str,
+        telegram_chat_id: str,
+        session: SessionProviderSession | None = None,
+    ) -> None:
         await self._collection.update_one(
             {'oid': chat_oid},
             {'$push': {'listeners': telegram_chat_id}},
@@ -85,7 +103,7 @@ class MongoDBChatsRepository(BaseChatsRepository, BaseMongoDBRepository):
 
 @dataclass
 class MongoDBMessagesRepository(BaseMessagesRepository, BaseMongoDBRepository):
-    async def add_message(self, message: Message, session=None) -> None:
+    async def add_message(self, message: Message, session: SessionProviderSession | None = None) -> None:
         await self._collection.insert_one(
             document=convert_message_entity_to_document(message),
             session=session,

@@ -7,6 +7,7 @@ from datetime import (
 	UTC,
 	datetime,
 )
+from typing import Any
 from uuid import uuid4
 
 from domain.events.base import BaseEvent
@@ -22,7 +23,7 @@ class MemoryOutboxRepository(BaseOutboxRepository):
 	_outbox: list[OutboxRow] = field(default_factory=list)
 	_topic_resolver: Callable[[BaseEvent], str] = lambda event: 'default-topic'
 
-	async def save_events(self, events: list[BaseEvent], session=None) -> None:
+	async def save_events(self, events: list[BaseEvent], session: Any | None = None) -> None:
 		for event in events:
 			self._outbox.append(
 				OutboxRow(

@@ -29,7 +29,7 @@ def _labeled(name: str, label: str, value: str) -> float:
 
 
 @pytest.fixture
-def baselines():
+def baselines() -> dict[str, dict[str, float]]:
     return {
         'events': {
             'NewChatCreatedEvent': _labeled('mediator_events_published_total', 'event', 'NewChatCreatedEvent'),
@@ -50,7 +50,10 @@ def mediator() -> Mediator:
 
 
 @pytest.mark.asyncio
-async def test_publish_increments_per_event_class(mediator, baselines):
+async def test_publish_increments_per_event_class(
+	mediator: Mediator,
+	baselines: dict[str, dict[str, float]],
+) -> None:
     await mediator.publish([
         NewChatCreatedEvent(chat_oid='c1', chat_title='room'),
         NewChatCreatedEvent(chat_oid='c2', chat_title='room-2'),
@@ -68,7 +71,10 @@ async def test_publish_increments_per_event_class(mediator, baselines):
 
 
 @pytest.mark.asyncio
-async def test_handle_command_counts_after_handler_resolution(mediator, baselines):
+async def test_handle_command_counts_after_handler_resolution(
+	mediator: Mediator,
+	baselines: dict[str, dict[str, float]],
+) -> None:
     # Registering nothing extra: CreateChatCommand is registered by the dummy
     # container's mediator. A single dispatch must count exactly one handled.
     from logic.commands.messages import CreateChatCommand
@@ -82,7 +88,7 @@ async def test_handle_command_counts_after_handler_resolution(mediator, baseline
 
 
 @pytest.mark.asyncio
-async def test_unregistered_command_raises_and_is_not_counted(mediator):
+async def test_unregistered_command_raises_and_is_not_counted(mediator: Mediator) -> None:
     @dataclass(frozen=True)
     class _UnregisteredCommand(BaseCommand):
         pass
@@ -96,7 +102,10 @@ async def test_unregistered_command_raises_and_is_not_counted(mediator):
 
 
 @pytest.mark.asyncio
-async def test_handle_query_counts_per_query_class(mediator, baselines):
+async def test_handle_query_counts_per_query_class(
+	mediator: Mediator,
+	baselines: dict[str, dict[str, float]],
+) -> None:
     # The counter measures flow volume: the query is counted when the mediator
     # dispatches it, even if the handler then raises a domain exception
     # (ChatNotFoundException for an unknown chat) — that exception must still

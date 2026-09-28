@@ -57,7 +57,7 @@ async def create_chat_handler(
         schema: CreateChatRequestSchema,
         container: Container = Depends(init_container),
         _user: str = Depends(get_current_user),
-):
+) -> CreateChatResponseSchema:
     """
     Create a new chat based on the provided request schema.
     Handles chat creation using the specified title and returns the response schema.
@@ -191,7 +191,7 @@ async def delete_chat_handler(
     chat_oid: str,
     container: Container = Depends(init_container),
     _user: str = Depends(get_current_user),
-):
+) -> None:
     mediator: Mediator = container.resolve(Mediator)
 
     try:

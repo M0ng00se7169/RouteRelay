@@ -27,10 +27,14 @@ class KafkaMessageBroker(BaseMessageBroker):
 	# single-broker dev cluster the ISR is just the leader, so behavior is
 	# unchanged there; this hardens the guarantee for any cluster with RF>1.
 	acks: str = 'all'
-	producer: AIOKafkaProducer | None = field(default=None, init=False)
-	consumer: AIOKafkaConsumer | None = field(default=None, init=False)
+	# AIOKafkaProducer/AIOKafkaConsumer instances (created in start()). Annotated
+	# as Any: aiokafka ships no type stubs, and strict mypy (disallow_any_unimported)
+	# forbids leaking its untyped classes into annotations — including the
+	# synthesized dataclass methods. All attribute access on them is untyped anyway.
+	producer: Any = field(default=None, init=False)
+	consumer: Any = field(default=None, init=False)
 
-	async def start(self):
+	async def start(self) -> None:
 		self.producer = AIOKafkaProducer(
 			bootstrap_servers=self.bootstrap_servers,
 			acks=self.acks,
@@ -43,7 +47,7 @@ class KafkaMessageBroker(BaseMessageBroker):
 		await self.producer.start()
 		await self.consumer.start()
 
-	async def send_message(self, topic: str, key: bytes, value: bytes):
+	async def send_message(self, topic: str, key: bytes, value: bytes) -> None:
 		if self.producer is None:
 			raise RuntimeError('KafkaMessageBroker.send_message called before start()')
 		# send() only buffers and returns a delivery future; awaiting THAT future
@@ -54,7 +58,7 @@ class KafkaMessageBroker(BaseMessageBroker):
 		# giving the O-2 circuit breaker real failures to count.
 		await self.producer.send_and_wait(topic=topic, key=key, value=value)
 
-	async def close(self):
+	async def close(self) -> None:
 		if self.producer is not None:
 			await self.producer.stop()
 		if self.consumer is not None:
@@ -72,6 +76,6 @@ class KafkaMessageBroker(BaseMessageBroker):
 		async for message in self.consumer:
 			yield orjson.loads(message.value)
 
-	async def stop_consuming(self):
+	def stop_consuming(self) -> None:
 		if self.consumer is not None:
 			self.consumer.unsubscribe()
