@@ -311,9 +311,70 @@
       ]
     },
     {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "unit": "short", "mappings": [ { "type": "value", "options": { "0": { "text": "no leader", "index": 0, "color": "text" }, "1": { "text": "leader", "index": 1, "color": "green" } } } ], "thresholds": { "mode": "absolute", "steps": [ { "color": "green", "value": null } ] } }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 108 },
+      "id": 25,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" }, "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false } },
+      "title": "Outbox relay leader lock (1 = a replica publishes)",
+      "type": "stat",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "max(outbox_relay_lock_held)", "legendFormat": "leader" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "min": 0, "max": 1, "unit": "percentunit" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 108 },
+      "id": 26,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "title": "Cache hit rate by operation",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (operation) (rate(cache_operations_total{result=\"hit\"}[5m])) / clamp_min(sum by (operation) (rate(cache_operations_total{result=~\"hit|miss\"}[5m])), 0.000001)", "legendFormat": "{{operation}}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 116 },
+      "id": 27,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "title": "Cache operations by operation & result (rate)",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (operation, result) (rate(cache_operations_total[5m]))", "legendFormat": "{{operation}} / {{result}}" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 116 },
+      "id": 28,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "title": "Cache errors & relay lock acquisitions (rate)",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "sum by (operation) (rate(cache_errors_total[5m]))", "legendFormat": "errors: {{operation}}" },
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(outbox_relay_lock_acquired_total[5m])", "legendFormat": "lock acquired" }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" },
+      "fieldConfig": { "defaults": { "custom": { "drawStyle": "line", "lineWidth": 1 }, "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 124 },
+      "id": 29,
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" }, "tooltip": { "mode": "single" } },
+      "title": "Presence heartbeat failures (rate)",
+      "type": "timeseries",
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${DS_PROMETHEUS}" }, "expr": "rate(presence_heartbeat_failures_total[5m])", "legendFormat": "failures" }
+      ]
+    },
+    {
       "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
       "fieldConfig": { "defaults": {}, "overrides": [] },
-      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 108 },
+      "gridPos": { "h": 12, "w": 24, "x": 0, "y": 132 },
       "id": 8,
       "options": {
         "showLabels": false,
@@ -372,6 +433,6 @@
   "timezone": "",
   "title": "kafka-chat-overview",
   "uid": "kafka-chat-overview",
-  "version": 2,
+  "version": 3,
   "weekStart": ""
 }

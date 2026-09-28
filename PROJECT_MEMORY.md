@@ -5,15 +5,15 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-28** · Tests: **217 passed, 0 warnings** (`cd app && uv run pytest`, ~6s) · mypy: **FULL STRICT clean, 121 files** (`uv run mypy` from repo root — files=["app"] is root-relative) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest via uv, promtool/amtool, docker build) — mypy not in CI yet (user decision pending)
+> Last updated: **2026-09-28** · Tests: **333 passed, 0 warnings** (`cd app && uv run pytest`, ~4s) · mypy: **FULL STRICT clean, 140 files** (`uv run mypy` from repo root — files=["app"] is root-relative) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest via uv, mypy, promtool/amtool, docker build)
 
 ---
 
 ## 1. What this project is
 
-FastAPI + Kafka + MongoDB multi-user chat backend demonstrating DDD, CQRS, and event-driven
-architecture. One demo user (OAuth2 password flow, JWT). Python 3.12 (`.python-version`), uv, pytest.
-Details: `docs/architecture.md`, `CLAUDE.md`.
+FastAPI + Kafka + MongoDB + Valkey multi-user chat backend demonstrating DDD, CQRS, and
+event-driven architecture. One demo user (OAuth2 password flow, JWT). Python 3.12
+(`.python-version`), uv, pytest. Details: `docs/architecture.md`, `CLAUDE.md`.
 
 ---
 
@@ -58,8 +58,54 @@ Key wiring facts:
 - `CircuitOpenError` → app-level handler in `application/api/main.py` → **HTTP 503 + Retry-After**
   (registered at app level on purpose: endpoints' broad `except ApplicationException → 400` would
   otherwise swallow it — do not add ApplicationException subclasses for infra errors).
+- A third, **private** `'valkey'` breaker (ADR-0008) guards the cache client; it is swallowed
+  INSIDE `ValkeyCacheClient`, because `CircuitOpenError` maps to HTTP 503 app-wide and a cache
+  outage must never become an API outage.
 - Config: `CIRCUIT_BREAKER_FAILURE_THRESHOLD` (5), `CIRCUIT_BREAKER_RECOVERY_TIME` (30s).
 - Metrics: `circuit_breaker_state{name}`, `circuit_breaker_rejected_total{name}` (see `infrastructure/metrics.py`).
+
+### Valkey (ADR-0008, implemented 2026-09-28)
+- `app/infrastructure/cache/{base,valkey,memory,keys,cached}.py`, `presence/{base,valkey,memory}.py`,
+  `locks/{base,valkey,memory}.py`; `docker_compose/valkey.yaml`; `valkey>=6.1.1,<7` added.
+- **ONE file imports `valkey`: `infrastructure/cache/valkey.py`.** Everything else is behind ABCs.
+  This forced a deviation from the ADR's own file list: the presence hash ops and the three lease
+  primitives live on `BaseCacheClient`, so `ValkeyPresenceTracker`/`ValkeyLeaseLock` import no
+  driver (ADR-0008 §9, deviation 1).
+- **Wiring order: `CircuitBreaker(Cached(Mongo))`** — the cache proxy is INSIDE the breaker so a
+  Valkey error is swallowed below it and never charged to the `'mongo'` breaker.
+- **Versioned invalidation:** a post bumps `chat:ver:{oid}`, page keys embed the version; a delete
+  drops `chat:{oid}` + the version key. No SCAN in the hot path.
+- **`AddTelegramListenerCommandHandler` also invalidates** the chat detail entry (ADR-0008 §9,
+  deviation 3 — the cached `Chat` carries listeners, so omitting this serves a stale listener list
+  for a TTL).
+- **Degradation is the contract:** every cache call returns the cold-cache value on error, logs a
+  warning and counts `cache_errors_total` (PRE-breaker). An open `'valkey'` breaker is swallowed
+  too — `CircuitOpenError` is mapped to HTTP 503 app-wide, and a cache outage must never become
+  one. `set_if_absent` falls back to **False** ("could not acquire"), never True.
+- **Presence:** `presence:{chat_oid}` hash, one field per socket, key TTL re-armed every
+  ttl/3. Hash fields have no TTL in the Valkey 8 baseline, so a crashed socket's field dies with
+  the key (over-count while survivors beat, never under-count). `GET /chat/{oid}/presence/`
+  returns `enabled:false, count:0` when the flag is off.
+- **Relay lease:** `OutboxRelay.lease: BaseDistributedLock | None`; acquire-or-skip at tick start
+  (a follower never even reads Mongo), renew per tick, release in `run()`'s `finally` so shutdown
+  hands the lease back. `lease=None` (default) is byte-for-byte the pre-ADR behavior.
+- **All 7 knobs default OFF** in `Config()`; the compose `.env` is the only place they turn on.
+  `create_cache_client` builds a `MemoryCacheClient` when all three flags are off, so no test or
+  old deployment ever constructs a Valkey client.
+- Gotchas: (1) **valkey-py types every command as `Union[Awaitable[T], T]`** (one class serves
+  sync+async) so mypy cannot await it — the client field is `Any` at that ONE boundary (same
+  pattern as aiokafka) and each method re-asserts its return type in a small closure; (2) `SET NX`
+  returns **None**, not False, when the key exists — coerce with `bool()`; (3) `eval()` args are
+  typed `str`, so pass `value.decode()` and `str(ttl)`; (4) `hash_set` takes `str` (not bytes)
+  because valkey-py's stub demands it; (5) the WS heartbeat's done-callback LOGS but never COUNTS
+  (the heartbeat counts its own failure) — counting in both double-reports.
+- Verified: 333 passed, mypy clean, ruff clean, **live Valkey smoke** (`app/scripts/valkey_smoke.py`
+  — 15/15 incl. both Lua scripts and the HSET+EXPIRE pipeline, since the test double cannot prove
+  them), **live degradation drill** with the container stopped (every op returned its cold-cache
+  value, breaker opened, nothing raised), `promtool check rules` 7 rules, compose config renders.
+  Runbook: `docs/runbooks/valkey-outage.md`. Alert `CacheErrorsHigh` (warning — degradation, not
+  an outage). Grafana gained 5 panels (lock stat, cache hit rate, ops by result, errors+acquisitions,
+  heartbeat failures).
 
 ---
 
@@ -74,12 +120,32 @@ Key wiring facts:
   (see `docs/cqrs-contract.md`).
 - **Formatting:** ruff line-length 100, single quotes, **tabs** in some files / **4 spaces** in
   others — match the file you are editing, do not reformat.
-- **After code changes:** `cd app && uv run pytest` (all 217 must stay green).
+- **After code changes:** `cd app && uv run pytest` (all 333 must stay green).
 
 ---
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-28 — ADR-0008: Valkey for cache-aside, presence, and the outbox relay lock
+  (Accepted; all 6 chunks implemented).** `docs/adr/0008-valkey-cache-presence-lock.md` §9 has the
+  status table plus 7 recorded deviations from the plan. `app/infrastructure/cache/` (base/valkey/
+  memory/keys/cached), `presence/`, `locks/`; `infrastructure/cache/valkey.py` is the only file
+  importing the driver. `CACHE_ENABLED` / `PRESENCE_ENABLED` / `RELAY_LOCK_ENABLED` default OFF
+  in `Config()`, ON in the compose `.env`. `noeviction` (128 MiB) so the relay lock can never be
+  silently evicted. New metrics `cache_operations_total{operation,result}`,
+  `cache_errors_total{operation}`, `presence_heartbeat_failures_total`,
+  `outbox_relay_lock_acquired_total`, `outbox_relay_lock_held`; a third breaker name `'valkey'`.
+  New endpoint `GET /chat/{oid}/presence/`. Test count 217 → 333. Details in the "Valkey
+  (ADR-0008)" section above.
+- **2026-09-28 — ADR-0008: Valkey adoption plan (Proposed, no code yet).**
+  `docs/adr/0008-valkey-cache-presence-lock.md` — decision: adopt Valkey for three scoped features:
+  cache-aside for the query path (versioned invalidation, no SCAN), WS presence (hash + TTL
+  heartbeat), outbox relay leader lock (SET NX PX lease). NOT for: Kafka replacement, WS fan-out,
+  durable storage. Six chunks (compose+client infra, read cache, invalidation, presence, lock,
+  observability/docs); all feature flags default OFF in `Config()` so tests/single-replica deploys
+  are untouched; `noeviction` (lock must not be evicted); client = `valkey` (valkey-py), the only
+  file importing it is `infrastructure/cache/valkey.py`, mypy-strict caveat noted (aiokafka
+  pattern). Status table in ADR §9 — all chunks Not started.
 - **2026-09-28 — mypy wired into CI + as a CD deploy gate.** `.github/workflows/ci.yml`: new
   `typecheck` job (name `Type check (mypy)`) — same uv pattern as tests (setup-uv@v10.2.0 pinned
   0.12.19, `uv sync --frozen` so CI runs exactly the locked mypy 1.20.2), plus a rolling

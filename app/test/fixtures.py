@@ -6,11 +6,20 @@ from punq import (
 		Scope,
 )
 
+from infrastructure.cache.base import BaseCacheClient
+from infrastructure.cache.cached import (
+	CachedChatsRepository,
+	CachedMessagesRepository,
+)
+from infrastructure.cache.memory import MemoryCacheClient
+from infrastructure.locks.base import BaseDistributedLock
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.relay import OutboxRelay
 from infrastructure.outbox.session import SessionProvider
+from infrastructure.presence.base import BasePresenceTracker
+from infrastructure.presence.memory import MemoryPresenceTracker
 from infrastructure.repositories.messages.base import (
 	BaseChatsRepository,
 	BaseMessagesRepository,
@@ -23,6 +32,10 @@ from infrastructure.resilience import (
 	CircuitBreaker,
 	CircuitBreakerChatsRepository,
 	CircuitBreakerMessagesRepository,
+)
+from infrastructure.websockets.managers import (
+	BaseConnectionManager,
+	ConnectionManager,
 )
 from logic.init import (
 	build_mediator,
@@ -75,8 +88,40 @@ class DummyMessageBroker:
 		pass
 
 
-def init_dummy_container(*, wrap_repos_with_breaker: bool = False) -> Container:
+def init_dummy_container(
+	*,
+	wrap_repos_with_breaker: bool = False,
+	wrap_repos_with_cache: bool = False,
+	presence_enabled: bool = False,
+) -> Container:
 	container = init_container()
+	config = container.resolve(Config)
+
+	# ADR-0008: the test cache is the in-memory client, always. It is both the
+	# test double for Valkey and the same fallback the production container uses
+	# with the feature flags off, so the cached code path is exercised either way.
+	cache = MemoryCacheClient()
+	container.register(BaseCacheClient, instance=cache, scope=Scope.singleton)
+	presence_tracker = MemoryPresenceTracker(cache=cache, ttl_seconds=config.presence_ttl_seconds)
+	container.register(BasePresenceTracker, instance=presence_tracker, scope=Scope.singleton)
+	# The relay lease stays None in tests (the dummy relay does not tick); the
+	# lock itself is covered directly in test/infrastructure/locks/.
+	container.register(BaseDistributedLock, instance=None, scope=Scope.singleton)
+
+	# The connection manager is a singleton that init_container already resolved
+	# while wiring the mediator, so re-register it explicitly: with presence on
+	# it must carry a tracker, otherwise the WS endpoint would report nobody.
+	container.register(
+		BaseConnectionManager,
+		instance=ConnectionManager(presence_tracker=presence_tracker if presence_enabled else None),
+		scope=Scope.singleton,
+	)
+	container._singletons.pop(BaseConnectionManager, None)  # type: ignore[call-overload]  # punq internals: untyped dict
+
+	if presence_enabled:
+		# The presence endpoint reports the flag itself, so the container's own
+		# Config must agree with the manager's wiring.
+		container.register(Config, instance=Config(PRESENCE_ENABLED=True), scope=Scope.singleton)
 
 	# Opt-in (used by the 503 integration test): wrap the in-memory repos in the
 	# same breaker proxies the production container wires (logic/init.py). Memory
@@ -84,6 +129,18 @@ def init_dummy_container(*, wrap_repos_with_breaker: bool = False) -> Container:
 	breaker = container.resolve(CircuitBreaker)
 	chats_repository: BaseChatsRepository = MemoryChatRepository()
 	messages_repository: BaseMessagesRepository = MemoryMessagesRepository()
+	if wrap_repos_with_cache:
+		# Same order as production: cache proxy INSIDE the breaker proxy.
+		chats_repository = CachedChatsRepository(
+			inner=chats_repository,
+			cache=cache,
+			ttl_seconds=config.cache_ttl_seconds,
+		)
+		messages_repository = CachedMessagesRepository(
+			inner=messages_repository,
+			cache=cache,
+			ttl_seconds=config.cache_ttl_seconds,
+		)
 	if wrap_repos_with_breaker:
 		chats_repository = CircuitBreakerChatsRepository(inner=chats_repository, breaker=breaker)
 		messages_repository = CircuitBreakerMessagesRepository(inner=messages_repository, breaker=breaker)
@@ -118,6 +175,9 @@ def init_dummy_container(*, wrap_repos_with_breaker: bool = False) -> Container:
 		BaseOutboxRepository,
 		SessionProvider,
 		OutboxRelay,
+		BaseCacheClient,
+		BasePresenceTracker,
+		BaseDistributedLock,
 	):
 		container._singletons.pop(key, None)  # type: ignore[call-overload]  # punq internals: untyped dict
 

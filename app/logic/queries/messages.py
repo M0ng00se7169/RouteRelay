@@ -11,9 +11,10 @@ from infrastructure.metrics import (
     db_operation_errors_total,
     safe_inc,
 )
+from infrastructure.presence.base import BasePresenceTracker
 from infrastructure.repositories.filters.messages import (
-    GetAllChatsFilters,
-    GetMessagesFilters,
+	GetAllChatsFilters,
+	GetMessagesFilters,
 )
 from infrastructure.repositories.messages.base import (
     BaseChatsRepository,
@@ -65,6 +66,18 @@ class GetAllChatsQuery(BaseQuery):
 
 @dataclass(frozen=True)
 class GetAllChatsListenersQuery(BaseQuery):
+    chat_oid: str
+
+
+@dataclass(frozen=True)
+class GetChatPresenceQuery(BaseQuery):
+    """How many WebSocket clients are currently attached to a chat.
+
+    Presence is API data, not a Prometheus gauge: a per-chat gauge would need a
+    chat-oid label, which is unbounded and forbidden (ADR-0006 D3). This is why
+    it is a query with an endpoint.
+    """
+
     chat_oid: str
 
 
@@ -128,3 +141,19 @@ class GetAllChatsListenersQueryHandler(BaseQueryHandler[GetAllChatsListenersQuer
             'query', 'chats',
             lambda: self.chats_repository.get_all_chat_listeners(chat_oid=query.chat_oid),
         )
+
+
+@dataclass(frozen=True)
+class GetChatPresenceQueryHandler(BaseQueryHandler[GetChatPresenceQuery, int]):
+    """Live-socket count for a chat, served from the presence tracker.
+
+    The tracker is the ONLY dependency: presence is ephemeral state that never
+    touches Mongo, and it is best-effort by contract — when the feature is off
+    the container still resolves a tracker, so this handler reports 0 rather
+    than special-casing a missing collaborator.
+    """
+
+    presence_tracker: BasePresenceTracker
+
+    async def handle(self, query: GetChatPresenceQuery) -> int:
+        return await self.presence_tracker.count(chat_oid=query.chat_oid)

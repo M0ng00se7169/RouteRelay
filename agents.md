@@ -7,7 +7,8 @@ It complements `.claude/rules/*.md` (structural rules) and `CLAUDE.md` (architec
 
 ## Project Context
 
-**FastAPI + Kafka + MongoDB** multi-user chat backend demonstrating DDD, CQRS, and event-driven architecture.
+**FastAPI + Kafka + MongoDB + Valkey** multi-user chat backend demonstrating DDD, CQRS, and
+event-driven architecture.
 
 | Aspect | Location |
 |--------|----------|

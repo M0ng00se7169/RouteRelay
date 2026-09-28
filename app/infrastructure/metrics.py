@@ -280,7 +280,8 @@ telegram_notifications_failed_total = Counter(
 # --- Circuit breaker (guarded dependencies) ----------------------------------
 # Emitted by app/infrastructure/resilience.py. The `name` label is a closed set:
 # 'mongo' guards the persistence path (repo proxies in logic/init.py), 'kafka'
-# guards the outbox relay's Kafka sends (O-2, create_outbox_relay).
+# guards the outbox relay's Kafka sends (O-2, create_outbox_relay), 'valkey'
+# guards the cache client (ADR-0008, create_valkey_circuit_breaker).
 # state: 0 = closed (healthy), 1 = open or half-open (failing fast / probing).
 
 circuit_breaker_state = Gauge(
@@ -295,6 +296,55 @@ circuit_breaker_rejected_total = Counter(
 	'Number of calls rejected immediately (fail fast) because the breaker was '
 	'open, per guarded dependency.',
 	['name'],
+)
+
+
+# --- Cache / Valkey (ADR-0008) -------------------------------------------------
+# Emitted by the cache proxies (infrastructure/cache/cached.py) and the Valkey
+# client (infrastructure/cache/valkey.py). Labels stay bounded (D3): cache
+# `operation` is a closed vocabulary (get/set/delete/...) and `result` is
+# hit/miss/ok/error. NO chat oids — cache keys are full of them.
+#
+# cache_errors_total is deliberately PRE-breaker (ADR-0008 §2.4): it answers
+# "is Valkey erroring?". Rejections by the open 'valkey' breaker are a separate
+# signal on circuit_breaker_rejected_total{name='valkey'}, so an open breaker
+# does not inflate the error rate.
+#
+# The outbox relay lock gauges are per-process and label-free: at most one
+# process holds the lease, and `outbox_relay_lock_held` is read as "is there a
+# leader" (any replica reporting 1). Per-holder identity is deliberately not
+# exported — it would be unbounded and is never actionable here.
+
+cache_operations_total = Counter(
+	'cache_operations_total',
+	'Number of cache operations by operation and result: hit/miss for reads, '
+	'ok for writes and invalidations, error for failures.',
+	['operation', 'result'],
+)
+
+cache_errors_total = Counter(
+	'cache_errors_total',
+	'Number of Valkey operation failures counted before the circuit breaker '
+	'(the app degrades to the uncached path; reads and writes keep working).',
+	['operation'],
+)
+
+presence_heartbeat_failures_total = Counter(
+	'presence_heartbeat_failures_total',
+	'Number of presence heartbeat/refresh failures — a socket stopped '
+	'refreshing its presence entry and will be reported as gone once its TTL '
+	'lapses.',
+)
+
+outbox_relay_lock_acquired_total = Counter(
+	'outbox_relay_lock_acquired_total',
+	'Number of times this process acquired the outbox relay leader lock.',
+)
+
+outbox_relay_lock_held = Gauge(
+	'outbox_relay_lock_held',
+	'1 while this process holds the outbox relay leader lock, 0 otherwise '
+	'(per process — any replica reporting 1 means a leader exists).',
 )
 
 
@@ -342,6 +392,11 @@ application_info = Gauge(
 # | application_info                | Gauge   | version | create_app() (Chunk 6.2) |
 # | circuit_breaker_state           | Gauge   | name    | circuit breaker (resilience) |
 # | circuit_breaker_rejected_total  | Counter | name    | circuit breaker (resilience) |
+# | cache_operations_total          | Counter | operation, result | cache proxies + Valkey client (ADR-0008) |
+# | cache_errors_total              | Counter | operation | Valkey client (ADR-0008)    |
+# | presence_heartbeat_failures_total | Counter | —     | WS manager (ADR-0008)        |
+# | outbox_relay_lock_acquired_total | Counter | —     | outbox relay lease (ADR-0008) |
+# | outbox_relay_lock_held          | Gauge   | —      | outbox relay lease (ADR-0008) |
 #
 # Every metric above is now owned in the table; the historical per-chunk
 # trailer was removed once all planned metrics landed in it.

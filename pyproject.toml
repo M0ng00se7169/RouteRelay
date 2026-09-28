@@ -16,6 +16,8 @@ dependencies = [
     "orjson>=3.12.0,<4",
     "websockets>=17.1,<18",
     "aiokafka>=0.14.0,<0.15",
+    # Valkey client (ADR-0008): cache-aside, chat presence, outbox relay lock.
+    "valkey>=6.1.1,<7",
     "aiojobs>=1.4.0,<2",
     "prometheus-client>=0.26.0,<0.27",
     "prometheus-fastapi-instrumentator>=8.1.0,<9",

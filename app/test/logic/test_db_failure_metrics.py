@@ -17,6 +17,7 @@ from prometheus_client import REGISTRY
 from domain.entities.messages import Chat
 from domain.events.base import BaseEvent
 from domain.values.messages import Title
+from infrastructure.cache.memory import MemoryCacheClient
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.messages.memory import (
@@ -150,6 +151,7 @@ async def test_delete_chat_counts_delete_failure_and_reraises() -> None:
         chats_repository=repo,
         outbox_repository=MemoryOutboxRepository(),
         session_provider=NoopSessionProvider(),
+        cache=MemoryCacheClient(),
     )
 
     before = _db_error('delete', 'chats', 'RuntimeError')

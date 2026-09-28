@@ -1,9 +1,13 @@
+import asyncio
 from typing import Any
 from unittest.mock import AsyncMock
 
 import pytest
 from prometheus_client import REGISTRY
 
+from infrastructure.cache.memory import MemoryCacheClient
+from infrastructure.presence.base import BasePresenceTracker
+from infrastructure.presence.memory import MemoryPresenceTracker
 from infrastructure.websockets.managers import (
     BaseConnectionManager,
     ConnectionManager,
@@ -211,3 +215,156 @@ async def test_broadcast_to_unknown_key_still_observes_duration(
     assert (
         _hist_count() - metric_baselines['ws_broadcast_duration_seconds_count'] == 1
     )
+
+
+# --- presence (ADR-0008, Chunk 4) --------------------------------------------
+
+
+@pytest.fixture
+def presence() -> MemoryPresenceTracker:
+    return MemoryPresenceTracker(cache=MemoryCacheClient(), ttl_seconds=30)
+
+
+@pytest.fixture
+def presence_manager(presence: MemoryPresenceTracker) -> ConnectionManager:
+    return ConnectionManager(presence_tracker=presence)
+
+
+@pytest.mark.asyncio
+async def test_presence_disabled_by_default_registers_nothing() -> None:
+    # Back-compat guard: ConnectionManager() with no tracker is byte-for-byte the
+    # pre-ADR behaviour, so no heartbeat task is started.
+    manager = ConnectionManager()
+    ws = _ws()
+
+    await manager.accept_connection(ws, key='c1')
+
+    assert manager._heartbeat_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_accept_starts_a_heartbeat_and_registers_presence(
+	presence_manager: ConnectionManager,
+	presence: MemoryPresenceTracker,
+) -> None:
+	ws = _ws()
+
+	await presence_manager.accept_connection(ws, key='c1')
+	# The heartbeat registers before its first sleep.
+	await asyncio.sleep(0)
+
+	assert await presence.count('c1') == 1
+	assert ws in presence_manager._heartbeat_tasks
+
+
+@pytest.mark.asyncio
+async def test_remove_cancels_the_heartbeat_and_drops_presence(
+	presence_manager: ConnectionManager,
+	presence: MemoryPresenceTracker,
+) -> None:
+	ws = _ws()
+	await presence_manager.accept_connection(ws, key='c1')
+	await asyncio.sleep(0)
+	task = presence_manager._heartbeat_tasks[ws]
+
+	await presence_manager.remove_connection(ws, key='c1')
+	# Let the cancellation be delivered to the task.
+	await asyncio.sleep(0)
+
+	assert await presence.count('c1') == 0
+	assert presence_manager._heartbeat_tasks == {}
+	# A leaked task would keep beating for a socket nobody can reach.
+	assert task.cancelled() or task.done()
+
+
+@pytest.mark.asyncio
+async def test_presence_counts_one_entry_per_socket(
+	presence_manager: ConnectionManager,
+	presence: MemoryPresenceTracker,
+) -> None:
+	await presence_manager.accept_connection(_ws(), key='c1')
+	await presence_manager.accept_connection(_ws(), key='c1')
+	await asyncio.sleep(0)
+
+	assert await presence.count('c1') == 2
+
+
+@pytest.mark.asyncio
+async def test_presence_is_scoped_per_chat(
+	presence_manager: ConnectionManager,
+	presence: MemoryPresenceTracker,
+) -> None:
+	await presence_manager.accept_connection(_ws(), key='c1')
+	await presence_manager.accept_connection(_ws(), key='c2')
+	await asyncio.sleep(0)
+
+	assert await presence.count('c1') == 1
+	assert await presence.count('c2') == 1
+
+
+@pytest.mark.asyncio
+async def test_disconnect_all_releases_presence(
+	presence_manager: ConnectionManager,
+	presence: MemoryPresenceTracker,
+) -> None:
+	await presence_manager.accept_connection(_ws(), key='c1')
+	await presence_manager.accept_connection(_ws(), key='c1')
+	await asyncio.sleep(0)
+
+	await presence_manager.disconnect_all('c1')
+
+	assert await presence.count('c1') == 0
+	assert presence_manager._heartbeat_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_heartbeat_failure_is_counted(
+	presence_manager: ConnectionManager,
+	metric_baselines: dict[str, float],
+) -> None:
+	class DyingTracker(BasePresenceTracker):
+		async def register(self, chat_oid: str, socket_id: str) -> None:
+			raise RuntimeError('cache gone')
+
+		async def refresh(self, chat_oid: str, socket_id: str) -> None:
+			raise RuntimeError('cache gone')
+
+		async def remove(self, chat_oid: str, socket_id: str) -> None:
+			raise RuntimeError('cache gone')
+
+		async def count(self, chat_oid: str) -> int:
+			return 0
+
+	presence_manager.presence_tracker = DyingTracker()
+	before = REGISTRY.get_sample_value('presence_heartbeat_failures_total') or 0.0
+
+	await presence_manager.accept_connection(_ws(), key='c1')
+	await asyncio.sleep(0)
+	await asyncio.sleep(0)
+
+	# A dead heartbeat means the chat silently under-reports its users, so the
+	# failure must be loud rather than swallowed.
+	after = REGISTRY.get_sample_value('presence_heartbeat_failures_total') or 0.0
+	assert after - before == 1
+
+
+@pytest.mark.asyncio
+async def test_presence_removal_failure_does_not_break_disconnect(
+	presence_manager: ConnectionManager,
+) -> None:
+	class FailingRemoveTracker(MemoryPresenceTracker):
+		async def remove(self, chat_oid: str, socket_id: str) -> None:
+			raise RuntimeError('cache gone')
+
+	presence_manager.presence_tracker = FailingRemoveTracker(
+		cache=MemoryCacheClient(), ttl_seconds=30,
+	)
+	ws = _ws()
+	await presence_manager.accept_connection(ws, key='c1')
+	await asyncio.sleep(0)
+
+	# The socket is still removed from the fan-out map: the entry expires on its
+	# own TTL, so a failed removal only delays the "gone" signal.
+	await presence_manager.remove_connection(ws, key='c1')
+
+	assert ws not in presence_manager.connections_map['c1']

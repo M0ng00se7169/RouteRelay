@@ -20,6 +20,7 @@ from application.api.messages.schemas import (
     CreateMessageResponseSchema,
     CreateMessageSchema,
     GetAllChatsQueryResponseSchema,
+    GetChatPresenceResponseSchema,
     GetMessagesQueryResponseSchema,
     MessageDetailSchema,
 )
@@ -37,8 +38,10 @@ from logic.queries.messages import (
     GetAllChatsListenersQuery,
     GetAllChatsQuery,
     GetChatDetailQuery,
+    GetChatPresenceQuery,
     GetMessagesQuery,
 )
+from settings.config import Config
 from settings.security import get_current_user
 
 router = APIRouter(tags=['Chat'])
@@ -230,6 +233,36 @@ async def add_chat_listener_handler(
         )
 
     return AddTelegramListenerResponseSchema.from_entity(listener)
+
+
+@router.get(
+    '/{chat_oid}/presence/',
+    status_code=status.HTTP_200_OK,
+    description='Number of WebSocket clients currently attached to this chat (ADR-0008). '
+                'Returns enabled=false and count=0 when presence is disabled.',
+    responses={
+        status.HTTP_200_OK: {'model': GetChatPresenceResponseSchema},
+    },
+    summary='Retrieve the live WebSocket count for this chat',
+    operation_id='getChatPresence',
+)
+async def get_chat_presence_handler(
+    chat_oid: str,
+    container: Container = Depends(init_container),
+) -> GetChatPresenceResponseSchema:
+    mediator: Mediator = container.resolve(Mediator)
+    config: Config = container.resolve(Config)
+
+    count = await mediator.handle_query(GetChatPresenceQuery(chat_oid=chat_oid))
+
+    return GetChatPresenceResponseSchema(
+        chat_oid=chat_oid,
+        # With presence off the manager never registers sockets, so the tracker
+        # is empty by construction. Say so in the response instead of letting a
+        # 0 look like a real measurement.
+        count=count if config.presence_enabled else 0,
+        enabled=config.presence_enabled,
+    )
 
 
 @router.get(

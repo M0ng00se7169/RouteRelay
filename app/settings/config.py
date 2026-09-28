@@ -43,6 +43,17 @@ class Config(BaseSettings):
     telegram_chat_id: str = Field(default='', alias='TELEGRAM_CHAT_ID')
     telegram_api_url: str = Field(default='https://api.telegram.org', alias='TELEGRAM_API_URL')
 
+    # Valkey (ADR-0008): cache-aside for hot reads, WS presence, and the outbox
+    # relay leader lock. Every feature flag defaults OFF, so a bare Config()
+    # (tests, existing deployments) behaves exactly as before the ADR.
+    valkey_url: str = Field(default='redis://valkey:6379/0', alias='VALKEY_URL')
+    cache_enabled: bool = Field(default=False, alias='CACHE_ENABLED')
+    cache_ttl_seconds: int = Field(default=60, alias='CACHE_TTL_SECONDS')
+    presence_enabled: bool = Field(default=False, alias='PRESENCE_ENABLED')
+    presence_ttl_seconds: int = Field(default=30, alias='PRESENCE_TTL_SECONDS')
+    relay_lock_enabled: bool = Field(default=False, alias='RELAY_LOCK_ENABLED')
+    relay_lock_ttl_seconds: int = Field(default=10, alias='RELAY_LOCK_TTL_SECONDS')
+
     # Prometheus server port (the Prometheus container, NOT the app's /metrics endpoint,
     # which is served on the API port).
     prometheus_port: int = Field(default=9090, alias='PROMETHEUS_PORT')

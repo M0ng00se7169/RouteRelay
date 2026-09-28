@@ -32,6 +32,13 @@
 #   this tolerates a brief outage and clears ~15m after the last rejection.
 #   Response procedure (built from the 2026-09-25 live fire drill): see the
 #   alert's runbook_url — docs/runbooks/kafka-outage.md.
+# - CacheErrorsHigh (ADR-0008) is a DEGRADATION alert, never a page: the cache
+#   is best-effort by contract, so the app keeps serving reads from Mongo and
+#   keeps accepting writes while this fires. cache_errors_total only counts real
+#   Valkey failures (pre-breaker); once the 'valkey' breaker opens, rejections
+#   land on circuit_breaker_rejected_total{name='valkey'} instead — so watch
+#   both when triaging. Same lazy-series caveat as OutboxRelayCircuitOpen: the
+#   counter only exists once something has failed.
 groups:
   - name: kafka-chat
     rules:
@@ -89,3 +96,12 @@ groups:
           summary: 'WebSocket fan-out failures ({{ $value }} failures/s)'
           runbook_url: 'docs/runbooks/ws-fanout.md'
           description: 'Per-socket send failures during fan-out in the last 5 minutes — clients are dropping mid-broadcast (dead sockets no longer abort the fan-out, but the failures signal client instability).'
+
+      - alert: CacheErrorsHigh
+        expr: increase(cache_errors_total[15m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: 'Valkey cache errors ({{ $value }} in 15m) — reads are falling back to Mongo'
+          runbook_url: 'docs/runbooks/valkey-outage.md'
+          description: 'The app recorded Valkey operation failures in the last 15 minutes. This is a degradation, NOT an outage: the cache is best-effort, so every read is being served from Mongo (slower, same answers) and every write is still succeeding. Chat presence under-reports and, if RELAY_LOCK_ENABLED is on, the outbox relay skips its ticks until the lease expires. Check the ''valkey'' circuit breaker state and the valkey container health; no app restart is required.'

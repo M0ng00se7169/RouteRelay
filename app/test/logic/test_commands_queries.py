@@ -10,6 +10,7 @@ from domain.entities.messages import (
 )
 from domain.events.base import BaseEvent
 from domain.values.messages import Title
+from infrastructure.cache.memory import MemoryCacheClient
 from infrastructure.outbox.memory import MemoryOutboxRepository
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.filters.messages import GetMessagesFilters
@@ -121,6 +122,7 @@ async def test_create_message_success() -> None:
         chats_repository=repo,
         outbox_repository=outbox,
         session_provider=NoopSessionProvider(),
+        cache=MemoryCacheClient(),
     )
 
     message = await handler.handle(CreateMessageCommand(chat_oid=chat.oid, text='hello'))
@@ -139,6 +141,7 @@ async def test_create_message_chat_not_found_raises() -> None:
         chats_repository=MemoryChatRepository(),
         outbox_repository=MemoryOutboxRepository(),
         session_provider=NoopSessionProvider(),
+        cache=MemoryCacheClient(),
     )
 
     with pytest.raises(ChatNotFoundException):
@@ -155,6 +158,7 @@ async def test_delete_chat_success() -> None:
         chats_repository=repo,
         outbox_repository=MemoryOutboxRepository(),
         session_provider=NoopSessionProvider(),
+        cache=MemoryCacheClient(),
     )
 
     await handler.handle(DeleteChatCommand(chat_oid=chat.oid))
@@ -171,6 +175,7 @@ async def test_delete_chat_not_found_raises() -> None:
         chats_repository=MemoryChatRepository(),
         outbox_repository=MemoryOutboxRepository(),
         session_provider=NoopSessionProvider(),
+        cache=MemoryCacheClient(),
     )
 
     with pytest.raises(ChatNotFoundException):

@@ -9,6 +9,7 @@ from punq import (
 )
 
 from domain.events.messages import NewMessageReceivedFromBrokerEvent
+from infrastructure.cache.base import BaseCacheClient
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.metrics import (
     kafka_consumer_errors_total,
@@ -69,6 +70,16 @@ async def close_message_broker(app: FastAPI | None = None) -> None:
     container = _active_container(app)
     message_broker: BaseMessageBroker = container.resolve(BaseMessageBroker)
     await message_broker.close()
+
+
+async def close_cache_client(app: FastAPI | None = None) -> None:
+    # ADR-0008: the Valkey client holds a connection pool that asyncio never
+    # closes on its own, so shutdown has to do it explicitly. aclose() is
+    # idempotent and swallows its own errors — a cache that refuses to close
+    # must not fail the shutdown path.
+    container = _active_container(app)
+    cache: BaseCacheClient = container.resolve(BaseCacheClient)
+    await cache.aclose()
 
 
 async def start_relay(app: FastAPI | None = None) -> asyncio.Task[None]:

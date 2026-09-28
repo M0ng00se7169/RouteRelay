@@ -13,15 +13,21 @@ from domain.values.messages import (
     Text,
     Title,
 )
+from infrastructure.cache.base import BaseCacheClient
+from infrastructure.cache.keys import (
+	chat_cache_key,
+	chat_version_key,
+)
 from infrastructure.metrics import (
-    db_operation_errors_total,
-    safe_inc,
+	cache_operations_total,
+	db_operation_errors_total,
+	safe_inc,
 )
 from infrastructure.outbox.base import BaseOutboxRepository
 from infrastructure.outbox.session import SessionProvider
 from infrastructure.repositories.messages.base import (
-    BaseChatsRepository,
-    BaseMessagesRepository,
+	BaseChatsRepository,
+	BaseMessagesRepository,
 )
 from logic.commands.base import BaseCommand, CommandHandler
 from logic.exceptions.messages import (
@@ -52,6 +58,21 @@ async def _count_db_errors(operation: str, collection: str, call: Callable[[], A
             exception=e.__class__.__name__,
         )
         raise
+
+
+async def _invalidate_messages_cache(cache: BaseCacheClient, chat_oid: str) -> None:
+	"""Bump the chat's cache generation (ADR-0008 Chunk 3).
+
+	Every cached messages page is keyed by this generation, so one INCR makes
+	all of them unreachable at once and they expire on their own TTL — no
+	SCAN, no wildcard delete.
+
+	Best effort by construction: the cache client's contract already returns a
+	safe value on error, and the cost of a missed invalidation is bounded by
+	``CACHE_TTL_SECONDS`` of staleness. It is never a lost write.
+	"""
+	await cache.increment(chat_version_key(chat_oid))
+	safe_inc(cache_operations_total, operation='delete', result='ok')
 
 
 @asynccontextmanager
@@ -110,6 +131,9 @@ class CreateMessageCommandHandler(CommandHandler[CreateMessageCommand, Message])
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider
+    # ADR-0008: the cache client for write-path invalidation. Always present —
+    # with the feature flag off it is the in-memory client, so no branch here.
+    cache: BaseCacheClient
 
     async def handle(self, command: CreateMessageCommand) -> Message:
         chat: Chat | None = await self.chats_repository.get_chat_by_oid(command.chat_oid)
@@ -132,6 +156,10 @@ class CreateMessageCommandHandler(CommandHandler[CreateMessageCommand, Message])
                 'insert', 'outbox',
                 lambda: self.outbox_repository.save_events(events, session=session),
             )
+        # Read-after-write freshness: the next GetMessagesQuery cannot serve the
+        # page key cached before this post. Done AFTER the transaction commits so
+        # we never invalidate for a write that rolled back.
+        await _invalidate_messages_cache(self.cache, command.chat_oid)
         await self._mediator.publish(events)
         return message
 
@@ -147,6 +175,8 @@ class DeleteChatCommandHandler(CommandHandler[DeleteChatCommand, None]):
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider
+    # ADR-0008: the cache client for write-path invalidation.
+    cache: BaseCacheClient
 
     async def handle(self, command: DeleteChatCommand) -> None:
         chat: Chat | None = await self.chats_repository.get_chat_by_oid(command.chat_oid)
@@ -165,6 +195,12 @@ class DeleteChatCommandHandler(CommandHandler[DeleteChatCommand, None]):
                 'insert', 'outbox',
                 lambda: self.outbox_repository.save_events(events, session=session),
             )
+        # A deleted chat is gone for good, so unlike the message case there is no
+        # generation to bump: drop the detail entry AND the version key outright.
+        # (Leaving the counter behind would leak one key per deleted chat.)
+        await self.cache.delete(chat_cache_key(command.chat_oid))
+        await self.cache.delete(chat_version_key(command.chat_oid))
+        safe_inc(cache_operations_total, operation='delete', result='ok')
         await self._mediator.publish(events)
 
 

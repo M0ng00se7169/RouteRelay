@@ -95,3 +95,16 @@ class ChatListenerListItemSchema(BaseModel):
     @classmethod
     def from_entity(cls, chat_listener: ChatListener) -> 'ChatListenerListItemSchema':
         return cls(oid=chat_listener.oid)
+
+
+class GetChatPresenceResponseSchema(BaseModel):
+    """Live WebSocket count for a chat (ADR-0008).
+
+    ``enabled`` is false when the feature is off, in which case ``count`` is
+    always 0 - presence is not tracked, so the endpoint reports the honest
+    "nobody is counted" rather than pretending to know.
+    """
+
+    chat_oid: str
+    count: int
+    enabled: bool = True
