@@ -29,6 +29,43 @@ services:
     healthcheck:
       test: nc -z localhost 29092
 
+  init-kafka:
+    image: confluentinc/cp-kafka:7.4.0
+    container_name: init-kafka
+    depends_on:
+      kafka:
+        condition: service_healthy
+    restart: 'no'
+    # One-shot topic bootstrap, same pattern as init-mongo in storages.yaml.
+    # The app never creates topics: it only produces/consumes, so on a cold
+    # broker every first send/subscribe races the broker's auto-create and
+    # aiokafka floods the log with "Topic X is not available during auto-create
+    # initialization" (plus a roundrobin "No partition metadata for topic X")
+    # until the topic finally materializes. Creating them up front removes the
+    # race and the log noise; the app contract is unchanged.
+    # Idempotent: --if-not-exists makes a re-run over an existing cluster a
+    # no-op. The `for` loop retries because the healthcheck (`nc -z`) only
+    # proves the port is open, not that the broker can serve topic requests yet.
+    # $$ = literal $ after compose interpolation; the `:-` defaults mirror the
+    # Config defaults in settings/config.py so this works without ../.env too.
+    command:
+      - bash
+      - -c
+      - |
+        topics="$${NEW_CHATS_EVENT_TOPIC:-new-chats-topic} $${NEW_MESSAGE_RECEIVED_TOPIC:-new-messages} $${CHAT_DELETED_TOPIC:-chat-deleted-topic} $${NEW_LISTENER_ADDED_TOPIC:-listener-added-topic}"
+        for topic in $$topics; do
+          for i in $$(seq 1 30); do
+            if kafka-topics --bootstrap-server kafka:29092 --create --if-not-exists --replication-factor 1 --partitions 1 --topic "$$topic"; then
+              break
+            fi
+            echo "waiting for kafka... ($$topic)"; sleep 2
+          done
+        done
+    env_file:
+      - ../.env
+    networks:
+      - backend
+
   kafka-ui:
     image: provectuslabs/kafka-ui
     container_name: kafka-ui

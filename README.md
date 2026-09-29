@@ -56,7 +56,7 @@ inhibition pairs, Telegram transport, silencing procedure).
 **Infrastructure services (Docker Compose):**
 
 - MongoDB (single-node replica set) + Mongo Express (admin UI on port 28081)
-- Kafka + Zookeeper + Kafka UI (port 8090)
+- Kafka + Zookeeper + Kafka UI (port 8090) + a one-shot `init-kafka` service that pre-creates the app topics
 - Valkey (port from `VALKEY_PORT` in `.env`; cache-aside, chat presence, outbox relay lock —
   every feature is behind a flag that defaults **off** in the app and **on** in the compose `.env`)
 - FastAPI app (port from `API_PORT` in `.env`)
@@ -119,6 +119,8 @@ Writes are made **atomic with their event emissions** using the [Transaction Out
 This decouples write latency from Kafka availability: a Kafka outage only delays delivery, it never drops events. The **command handlers** write the outbox row inside the same transaction; the event handlers under `logic/events/messages.py` keep only in-process side effects and no longer send to Kafka directly.
 
 > ⚠️ **MongoDB must run as a single-node replica set** for transactions to work. The compose stack starts Mongo with `--replSet rs0` and a one-shot `init-mongo` service runs `rs.initiate()`. The connection URI in `.env` must include `?replicaSet=rs0`.
+
+> ⚠️ **Kafka topics are pre-created by a one-shot `init-kafka` service**, not by the app. The app only produces and consumes, so on a cold broker the first send/subscribe would race the broker's auto-create and aiokafka would log `Topic X is not available during auto-create initialization` until the topic appeared. `init-kafka` runs `kafka-topics --create --if-not-exists` for every topic in the table below and `main-app` waits for it (`service_completed_successfully`). Re-running it is a no-op.
 
 ### Observability
 

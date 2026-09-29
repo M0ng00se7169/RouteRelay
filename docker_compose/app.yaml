@@ -19,6 +19,13 @@ services:
     depends_on:
       kafka:
         condition: service_healthy
+      # Topics must exist before the consumer subscribes: without this the app
+      # starts on an empty broker and aiokafka logs auto-create warnings until
+      # the topics appear. service_completed_successfully — init-kafka is a
+      # one-shot (restart: 'no'), so "started" would be enough for ordering but
+      # "completed successfully" also guarantees creation actually happened.
+      init-kafka:
+        condition: service_completed_successfully
 
 networks:
   backend:

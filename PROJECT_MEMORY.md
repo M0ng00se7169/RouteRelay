@@ -126,6 +126,21 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-28 — `init-kafka` one-shot service: Kafka topics are now pre-created (no more
+  auto-create warning spam).** The app only produces/consumes, so on a cold broker every first
+  send/subscribe raced the broker's auto-create: aiokafka logged
+  `Topic new-messages|new-chats-topic is not available during auto-create initialization`
+  (`aiokafka/cluster.py:256`, `LeaderNotAvailableError`) plus a roundrobin
+  `No partition metadata for topic` until the topic materialized — benign, but a wall of noise
+  (and the reason the `POST /chat/` timestamp was followed by 4 warnings 100 ms apart).
+  `docker_compose/kafka.yaml` gains `init-kafka`, modelled on `init-mongo` (`storages.yaml:19`):
+  `restart: 'no'`, list-form command + block scalar, `kafka-topics --create --if-not-exists` for
+  the 4 topics, a `seq 1 30` retry loop (the `nc -z` healthcheck only proves the port is open,
+  not that topic requests succeed yet), topic names from env with `:-` defaults mirroring
+  `settings/config.py`. `app.yaml` now depends on it with `service_completed_successfully`.
+  Verified: creates the 2 missing topics, exit 0, all 4 present; second run is a no-op (exit 0).
+  No app code changed — the contract is identical, only the timing noise is gone.
+
 - **2026-09-28 — ADR-0008: Valkey for cache-aside, presence, and the outbox relay lock
   (Accepted; all 6 chunks implemented).** `docs/adr/0008-valkey-cache-presence-lock.md` §9 has the
   status table plus 7 recorded deviations from the plan. `app/infrastructure/cache/` (base/valkey/
@@ -457,8 +472,10 @@ are verified fixed as of 2026-09-25.
   Verified BOTH paths on a throwaway compose project (`-p frest` → fresh volume): fresh volume
   initiates + PRIMARY + transaction roundtrip; already-initiated volume skips cleanly (exit 0).
   Also demystified: aiokafka `GroupCoordinatorNotAvailableError` spam on cold boot is benign
-  (auto-create lag; settles in ~1 min, `kafka_consumer_up 1`, topic `new-messages` created),
-  and OpenAPI JSON lives at `/openapi.json` (only docs_url is under `/api`). Compose project
+  (auto-create lag; settles in ~1 min, `kafka_consumer_up 1`, topic `new-messages` created) —
+  and is now GONE: the sibling warning `Topic X is not available during auto-create
+  initialization` is fixed at the source by `init-kafka` (see §4, 2026-09-28).
+  Also: OpenAPI JSON lives at `/openapi.json` (only docs_url is under `/api`). Compose project
   name comes from the FIRST `-f` file's dir — both copies get `docker_compose`, so volumes are
   shared across checkouts (use `-p` to isolate).
 
