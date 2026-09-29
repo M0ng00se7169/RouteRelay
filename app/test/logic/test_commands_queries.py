@@ -192,6 +192,7 @@ async def test_add_telegram_listener_success() -> None:
         chats_repository=repo,
         outbox_repository=MemoryOutboxRepository(),
         session_provider=NoopSessionProvider(),
+        cache=MemoryCacheClient(),
     )
 
     await handler.handle(AddTelegramListenerCommand(chat_oid=chat.oid, telegram_chat_id='tg-1'))
@@ -209,6 +210,7 @@ async def test_add_telegram_listener_chat_not_found_raises() -> None:
         chats_repository=MemoryChatRepository(),
         outbox_repository=MemoryOutboxRepository(),
         session_provider=NoopSessionProvider(),
+        cache=MemoryCacheClient(),
     )
 
     with pytest.raises(ChatNotFoundException):

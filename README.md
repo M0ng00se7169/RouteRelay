@@ -24,7 +24,7 @@ seconds without a rebuild. Follow the trail:
 | **3 · Deploy** | `main-app` runs from the pinned GHCR tag via a deploy-specific compose file (no dev bind-mount, no `--reload`, no rebuild — compose's override merge cannot remove keys, so the file *replaces* the service) | [deploy & rollback runbook](docs/runbooks/deploy-and-rollback.md) |
 | **4 · Roll back** | Pin the previous good `APP_IMAGE=<sha>` in `.env`, re-run `up` — done in seconds, no `git revert`, no rebuild; the app is stateless by design (transactional outbox), so Mongo/Kafka/Alertmanager state survives the swap | [runbook → rollback](docs/runbooks/deploy-and-rollback.md) |
 
-The observability stack is part of the same story, not an afterthought: 6 alert rules, every one
+The observability stack is part of the same story, not an afterthought: 7 alert rules, every one
 linked to a written runbook (`docs/runbooks/`), validated in CI so a malformed rule can't reach
 the live Prometheus — and the alerting design decisions are recorded in
 [ADR-0006](docs/adr/0006-metrics-implementation-plan.md) (metrics + rules, calibrated by a
@@ -427,7 +427,8 @@ Run from the `app/` directory or ensure `app/` is on `PYTHONPATH`. MongoDB and K
 uv run pytest
 ```
 
-Tests use in-memory repositories (see `app/test/` fixtures).
+Expect **336 passed** across 34 test files. Tests use in-memory repositories (see `app/test/`
+fixtures) — no Mongo, Kafka, or Valkey needed.
 
 ### 6. Pre-commit hooks
 
@@ -467,7 +468,7 @@ empty. (Alert delivery to Telegram is a separate pipeline — see "Alerts" under
 
 ## CI/CD (details)
 
-The four CI jobs and the CD → GHCR flow are summarized with links in "Engineering Highlights"
+The five CI jobs and the CD → GHCR flow are summarized with links in "Engineering Highlights"
 above; this section is the operational reference.
 
 - Triggers: CI runs on pushes to `main`/`features` and PRs to `main`; CD runs on pushes to

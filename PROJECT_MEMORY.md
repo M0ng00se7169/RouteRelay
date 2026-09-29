@@ -5,7 +5,7 @@
 > meaningful change.** Where this file and older docs disagree, this file is newer — but re-verify
 > line numbers before editing (files move).
 >
-> Last updated: **2026-09-28** · Tests: **333 passed, 0 warnings** (`cd app && uv run pytest`, ~4s) · mypy: **FULL STRICT clean, 140 files** (`uv run mypy` from repo root — files=["app"] is root-relative) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest via uv, mypy, promtool/amtool, docker build)
+> Last updated: **2026-09-29** · Tests: **336 passed, 0 warnings** (`cd app && uv run pytest`, ~10s) · mypy: **FULL STRICT clean, 141 files** (`uv run mypy` from repo root — files=["app"] is root-relative) · CI: GitHub Actions (`.github/workflows/ci.yml`: pre-commit lint, pytest via uv, mypy, promtool/amtool, docker build)
 
 ---
 
@@ -126,6 +126,18 @@ Key wiring facts:
 
 ## 4. Recently completed (newest first)
 
+- **2026-09-29 — ADR-0008 deviation 3 actually implemented (architecture review found it was
+  documented but missing).** `AddTelegramListenerCommandHandler` now takes `cache: BaseCacheClient`
+  (resolved in `init_add_telegram_listener_command_handler`, always — memory client with the flag
+  off) and deletes `chat:{oid}` AFTER the transaction commits, so `GET /chat/{oid}/` cannot serve a
+  listener-less chat for up to `CACHE_TTL_SECONDS`. Not a version bump: messages pages carry no
+  listeners. This also shrinks the duplicate-listener race window back to ms — the duplicate guard
+  lives in `Chat.add_listener` reading state via `get_chat_by_oid`, i.e. through the cache, and
+  Mongo's `add_telegram_listener` is an unconditional `$push`. Tests: 3 new in
+  `test_cache_invalidation.py` (invalidation + detail re-read sees the listener; version key
+  untouched; write succeeds with a broken cache) — 333 → 336. mypy clean (141 files), ruff clean.
+  Two existing `AddTelegramListenerCommandHandler(...)` constructions in `test_commands_queries.py`
+  gained `cache=MemoryCacheClient()`.
 - **2026-09-28 — `init-kafka` one-shot service: Kafka topics are now pre-created (no more
   auto-create warning spam).** The app only produces/consumes, so on a cold broker every first
   send/subscribe raced the broker's auto-create: aiokafka logged
