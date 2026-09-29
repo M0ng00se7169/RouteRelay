@@ -18,6 +18,7 @@ from prometheus_fastapi_instrumentator.instrumentation import (
 
 from application.api.auth.handlers import router as auth_router
 from application.api.lifespan import (
+	close_cache_client,
 	close_message_broker,
 	init_message_broker,
 	start_kafka_consumer,
@@ -44,8 +45,11 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 	kafka_consumer_task: asyncio.Task[None] = await start_kafka_consumer(app)
 	yield
 	await stop_kafka_consumer(kafka_consumer_task, app)
+	# Relay first: it releases the outbox leader lock on shutdown, which needs
+	# the cache client still open (ADR-0008).
 	await stop_relay(relay_task)
 	await close_message_broker(app)
+	await close_cache_client(app)
 
 
 def create_app() -> FastAPI:

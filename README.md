@@ -42,6 +42,7 @@ inhibition pairs, Telegram transport, silencing procedure).
 | **Web framework**        | FastAPI, Uvicorn, Starlette           |
 | **Persistence**          | MongoDB via Motor (async)             |
 | **Messaging**            | Apache Kafka via aiokafka             |
+| **Cache / ephemeral**    | Valkey via valkey-py (cache-aside, presence, relay lock) |
 | **Real-time**            | WebSockets (`websockets` library)     |
 | **Validation / config**  | Pydantic, pydantic-settings           |
 | **Serialization**        | orjson                                |
@@ -55,7 +56,9 @@ inhibition pairs, Telegram transport, silencing procedure).
 **Infrastructure services (Docker Compose):**
 
 - MongoDB (single-node replica set) + Mongo Express (admin UI on port 28081)
-- Kafka + Zookeeper + Kafka UI (port 8090)
+- Kafka + Zookeeper + Kafka UI (port 8090) + a one-shot `init-kafka` service that pre-creates the app topics
+- Valkey (port from `VALKEY_PORT` in `.env`; cache-aside, chat presence, outbox relay lock —
+  every feature is behind a flag that defaults **off** in the app and **on** in the compose `.env`)
 - FastAPI app (port from `API_PORT` in `.env`)
 - Prometheus (port from `PROMETHEUS_PORT` in `.env`)
 - Loki + Promtail (log aggregation, Loki port from `LOKI_PORT` in `.env`)
@@ -117,6 +120,8 @@ This decouples write latency from Kafka availability: a Kafka outage only delays
 
 > ⚠️ **MongoDB must run as a single-node replica set** for transactions to work. The compose stack starts Mongo with `--replSet rs0` and a one-shot `init-mongo` service runs `rs.initiate()`. The connection URI in `.env` must include `?replicaSet=rs0`.
 
+> ⚠️ **Kafka topics are pre-created by a one-shot `init-kafka` service**, not by the app. The app only produces and consumes, so on a cold broker the first send/subscribe would race the broker's auto-create and aiokafka would log `Topic X is not available during auto-create initialization` until the topic appeared. `init-kafka` runs `kafka-topics --create --if-not-exists` for every topic in the table below and `main-app` waits for it (`service_completed_successfully`). Re-running it is a no-op.
+
 ### Observability
 
 #### Metrics (Prometheus)
@@ -132,13 +137,16 @@ This decouples write latency from Kafka availability: a Kafka outage only delays
 - `kafka_consumer_malformed_total` — consumed messages that failed validation (no chat_oid/message)
 - `kafka_consumer_up` — 1 while the consumer loop task is running (stays 1 through reconnect backoff), 0 after graceful stop or any other task exit
 - `kafka_consumer_reconnects_total{topic}` — reconnection attempts after the broker stream died or exited cleanly (exponential-backoff retry loop)
-- `circuit_breaker_state{name}` / `circuit_breaker_rejected_total{name}` — per-dependency circuit breaker state (`mongo` persistence path, `kafka` outbox relay) and fail-fast rejections while a breaker is open
+- `circuit_breaker_state{name}` / `circuit_breaker_rejected_total{name}` — per-dependency circuit breaker state (`mongo` persistence path, `kafka` outbox relay, `valkey` cache) and fail-fast rejections while a breaker is open
 - `ws_connections_active` / `ws_connections_accepted_total` / `ws_connections_removed_total` — live WebSocket connection tracking (gauge recomputed from the manager's own map on every accept/remove)
 - `ws_messages_broadcast_total` / `ws_broadcast_failures_total` — fan-out successes and per-socket send failures (one dead socket no longer aborts the fan-out)
 - `ws_broadcast_duration_seconds` — fan-out latency, including failed per-socket attempts
 - `mediator_events_published_total{event}` / `mediator_commands_handled_total{command}` / `mediator_queries_handled_total{query}` — CQRS flow volume per message class (unregistered commands are not counted)
 - `db_operation_errors_total{operation,collection,exception}` — persistence-call failures in the command/query handlers (domain errors like `ChatNotFoundException` are not counted)
 - `telegram_notifications_sent_total` / `telegram_notifications_failed_total` — Telegram delivery attempts (nothing counted when Telegram is unconfigured)
+- `cache_operations_total{operation,result}` / `cache_errors_total{operation}` — cache-aside hits/misses/writes and real Valkey failures (counted before the `'valkey'` breaker, so it stays a clean "is Valkey erroring?" signal)
+- `presence_heartbeat_failures_total` — presence heartbeat failures (a socket stopped refreshing, so its chat under-reports users)
+- `outbox_relay_lock_acquired_total` / `outbox_relay_lock_held` — outbox relay leader lock (per process; any replica reporting 1 means a leader exists)
 - `application_info{version}` — build info, always 1; version comes from the `APP_VERSION` env var (default `0.1.0`)
 
 The full metric registry — names, types, labels, owners, meanings, and
@@ -149,17 +157,17 @@ to the registry module — never ad-hoc in feature modules.
 #### Alerts (Prometheus rules)
 
 `docker_compose/prometheus-alerts.yml` (loaded via `rule_files` in
-`prometheus.yml`) defines six alerts: `OutboxBacklogGrowing`, `OutboxRelayFailing`,
+`prometheus.yml`) defines seven alerts: `OutboxBacklogGrowing`, `OutboxRelayFailing`,
 `OutboxRelayCircuitOpen`, `KafkaConsumerDown` (critical), `KafkaConsumerReconnecting`,
-and `WSBroadcastFailures`. Alerts are routed through **Alertmanager**
+`WSBroadcastFailures`, and `CacheErrorsHigh`. Alerts are routed through **Alertmanager**
 (`docker_compose/alertmanager.yaml`, per `docs/adr/0007-alertmanager-wiring.md`) with
 severity-based routing and inhibition; oncall-critical and team-warnings deliver to both
 **Telegram** (built-in receiver; credentials in gitignored secret files, never committed) and
 the app's `/ops/alerts` webhook sink, so every alert appears in Telegram and in the structured
 JSON logs. Every alert carries a `runbook_url` annotation into `docs/runbooks/`
-(`kafka-outage.md`, `kafka-consumer.md`, `ws-fanout.md`). Expressions, thresholds (including
-the Locust-calibrated `outbox_pending` limit) and the full table: `docs/architecture.md`
-→ "Alert rules".
+(`kafka-outage.md`, `kafka-consumer.md`, `ws-fanout.md`, `valkey-outage.md`). Expressions,
+thresholds (including the Locust-calibrated `outbox_pending` limit) and the full table:
+`docs/architecture.md` → "Alert rules".
 
 Quick check that the endpoint is live:
 
@@ -186,6 +194,8 @@ The app emits **JSON-structured log lines** (`level`, `logger`, `message`) — c
 - HTTP latency p95 by handler
 - Outbox pending / published / errors and Kafka messages sent
 - Circuit breaker state per dependency (closed / open) and rejection rate by breaker name
+- Cache hit rate by operation, cache operations by result, cache errors + relay lock acquisitions
+- Outbox relay leader lock (0/1) and presence heartbeat failures
 - Live app logs (`{container="main-app"}`)
 
 Log in with `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` from `.env` (UI at `:${GRAFANA_PORT}`).
@@ -243,6 +253,7 @@ Interactive docs: `/api/docs`
 | `GET`    | `/chat/{chat_oid}/messages/`  | List messages in a chat                         |
 | `POST`   | `/chat/{chat_oid}/listeners/` | Add Telegram listener to chat                   |
 | `GET`    | `/chat/{chat_oid}/listeners/` | List chat listeners                             |
+| `GET`    | `/chat/{chat_oid}/presence/`  | Live WebSocket count for the chat (`enabled:false` + `count:0` when presence is off) |
 
 
 
@@ -314,11 +325,23 @@ Settings are loaded from environment variables via `settings/config.py`:
 | `GRAFANA_ADMIN_PASSWORD`      | `admin`                     | Grafana admin password |
 | `ALERTMANAGER_PORT`           | `9093`                      | Alertmanager UI/API port (Docker) |
 | `API_PORT`                    | (required in Docker)      | Host port for the app   |
+| `VALKEY_PORT`                 | `6379`                     | Host port for the valkey container |
+| `VALKEY_URL`                  | `redis://valkey:6379/0`    | valkey-py URL (`redis://` is the protocol-correct scheme) |
+| `CACHE_ENABLED`               | `False`                    | Master switch for cache-aside reads |
+| `CACHE_TTL_SECONDS`           | `60`                       | Read-path TTL (±10% jitter) |
+| `PRESENCE_ENABLED`            | `False`                    | WS heartbeat → presence tracker |
+| `PRESENCE_TTL_SECONDS`        | `30`                       | Heartbeat refreshes every ttl/3 |
+| `RELAY_LOCK_ENABLED`          | `False`                    | Outbox relay leader lock |
+| `RELAY_LOCK_TTL_SECONDS`      | `10`                       | Lease TTL, renewed every ttl/3 |
 
 
 Additional `.env` variables used by Docker Compose:
 
 - `MONGO_DB_ADMIN_USERNAME`, `MONGO_DB_ADMIN_PASSWORD` — Mongo Express auth
+
+> **The seven ADR-0008 knobs default OFF**, so a bare `Config()` (tests, a prod image built before
+> the valkey service existed) behaves exactly as it did before. The compose `.env` is the only
+> place that turns them on — see `docs/adr/0008-valkey-cache-presence-lock.md`.
 
 ---
 
@@ -358,12 +381,13 @@ ALERTMANAGER_PORT=9093
 ### 2. Start infrastructure and app
 
 ```bash
-# All services (MongoDB, Kafka, app)
+# All services (MongoDB, Kafka, Valkey, app)
 make all
 
 # Or individually:
 make storages   # MongoDB + Mongo Express
 make kafka      # Kafka + Zookeeper + Kafka UI
+make valkey     # Valkey (cache / presence / relay lock)
 make app        # FastAPI application
 ```
 
@@ -381,6 +405,9 @@ make app        # FastAPI application
 | Alertmanager  | [http://localhost:9093](http://localhost:9093)                   |
 | Loki          | [http://localhost:3100](http://localhost:3100)                   |
 | Grafana       | [http://localhost:3000](http://localhost:3000)                   |
+
+Valkey has no UI — inspect it with `docker exec chat-valkey valkey-cli monitor` (or
+`valkey-cli hgetall presence:<chat-oid>` to see a chat's live sockets).
 
 
 
@@ -460,21 +487,24 @@ above; this section is the operational reference.
 
 | Target                | Action                          |
 | --------------------- | ------------------------------- |
-| `make all`            | Start everything: storages + app + Kafka + Prometheus + Alertmanager + observability (Loki/Promtail/Grafana) |
+| `make all`            | Start everything: storages + app + Kafka + Valkey + Prometheus + Alertmanager + observability (Loki/Promtail/Grafana) |
 | `make app`            | Start FastAPI container         |
 | `make storages`       | Start MongoDB replica-set stack |
 | `make kafka`          | Start Kafka stack               |
+| `make valkey`         | Start Valkey stack              |
 | `make prometheus`     | Start Prometheus + Alertmanager (plus app + Kafka, so they share the backend network) |
 | `make observability`  | Start Loki + Promtail + Grafana only |
 | `make all-down`       | Stop everything                 |
 | `make app-down`       | Stop the app                    |
 | `make storages-down`  | Stop the storage stack          |
 | `make kafka-down`     | Stop the Kafka stack            |
+| `make valkey-down`    | Stop the Valkey stack           |
 | `make prometheus-down`| Stop Prometheus + Alertmanager (+ app + Kafka) |
 | `make observability-down` | Stop observability stack    |
 | `make app-shell`      | Shell into `main-app` container |
 | `make app-logs`       | Follow app logs                 |
 | `make kafka-logs`     | Follow Kafka stack logs         |
+| `make valkey-logs`    | Follow Valkey logs              |
 | `make prometheus-logs`| Follow Prometheus + app logs    |
 | `make observability-logs` | Follow observability stack logs |
 

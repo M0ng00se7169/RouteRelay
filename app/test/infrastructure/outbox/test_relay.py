@@ -9,6 +9,10 @@ from uuid import uuid4
 import pytest
 from prometheus_client import REGISTRY
 
+from infrastructure.cache.keys import relay_lock_key
+from infrastructure.cache.memory import MemoryCacheClient
+from infrastructure.locks.base import BaseDistributedLock
+from infrastructure.locks.memory import MemoryLeaseLock
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.outbox.base import OutboxRow
 from infrastructure.outbox.memory import MemoryOutboxRepository
@@ -86,6 +90,7 @@ def _build_relay(
 	repo: MemoryOutboxRepository,
 	broker: FakeBroker,
 	circuit_breaker: CircuitBreaker | None = None,
+	lease: BaseDistributedLock | None = None,
 ) -> OutboxRelay:
 	return OutboxRelay(
 		outbox_repository=repo,
@@ -93,6 +98,7 @@ def _build_relay(
 		poll_interval=0.0,
 		batch_size=10,
 		circuit_breaker=circuit_breaker,
+		lease=lease,
 	)
 
 
@@ -398,3 +404,130 @@ async def test_relay_outbox_pending_reflects_true_backlog_beyond_batch_size(metr
 
 	assert len(broker.sent) == 15
 	assert _value('outbox_pending') == 0
+
+
+# --- outbox relay leader lock (ADR-0008, Chunk 5) ---------------------------
+
+
+def _lease(cache: MemoryCacheClient, holder_id: str) -> MemoryLeaseLock:
+	return MemoryLeaseLock(
+		cache=cache,
+		key=relay_lock_key(),
+		ttl_seconds=10,
+		holder_id=holder_id,
+	)
+
+
+@pytest.mark.asyncio
+async def test_lease_holder_publishes_and_reports_held() -> None:
+	repo = MemoryOutboxRepository()
+	repo._outbox.append(_make_row())
+	broker = FakeBroker()
+	relay = _build_relay(repo, broker, lease=_lease(MemoryCacheClient(), 'replica-1'))
+
+	await relay._tick()
+
+	assert len(broker.sent) == 1
+	assert _value('outbox_relay_lock_held') == 1.0
+	assert _value('outbox_relay_lock_acquired_total') > 0
+
+
+@pytest.mark.asyncio
+async def test_second_replica_skips_the_tick_entirely() -> None:
+	# Two replicas polling the same outbox is correct (at-least-once) but
+	# wasteful; the lease makes the loser skip BEFORE it even reads Mongo.
+	shared = MemoryCacheClient()
+	leader = _lease(shared, 'replica-1')
+	follower = _lease(shared, 'replica-2')
+	assert await leader.acquire() is True
+
+	repo = MemoryOutboxRepository()
+	repo._outbox.append(_make_row())
+	broker = FakeBroker()
+	relay = _build_relay(repo, broker, lease=follower)
+
+	await relay._tick()
+
+	assert broker.sent == []
+	assert await repo.get_unsent(10) != []
+	assert _value('outbox_relay_lock_held') == 0.0
+
+
+@pytest.mark.asyncio
+async def test_renewing_holder_keeps_publishing_across_ticks() -> None:
+	shared = MemoryCacheClient()
+	lease = _lease(shared, 'replica-1')
+	repo = MemoryOutboxRepository()
+	broker = FakeBroker()
+	relay = _build_relay(repo, broker, lease=lease)
+
+	repo._outbox.append(_make_row())
+	await relay._tick()
+	repo._outbox.append(_make_row())
+	await relay._tick()
+
+	assert len(broker.sent) == 2
+	# Only the first tick ACQUIRED; the second renewed an existing lease.
+	assert _value('outbox_relay_lock_acquired_total') > 0
+
+
+@pytest.mark.asyncio
+async def test_lost_lease_makes_the_relay_reacquire() -> None:
+	shared = MemoryCacheClient()
+	lease = _lease(shared, 'replica-1')
+	assert await lease.acquire() is True
+	repo = MemoryOutboxRepository()
+	repo._outbox.append(_make_row())
+	broker = FakeBroker()
+	relay = _build_relay(repo, broker, lease=lease)
+
+	# Another replica took over after our lease expired.
+	await shared.delete(relay_lock_key())
+	thief = _lease(shared, 'replica-2')
+	assert await thief.acquire() is True
+
+	await relay._tick()
+
+	assert broker.sent == []
+	assert lease.is_held is False
+	assert thief.is_held is True
+	assert _value('outbox_relay_lock_held') == 0.0
+
+
+@pytest.mark.asyncio
+async def test_relay_run_releases_the_lease_on_shutdown() -> None:
+	import asyncio
+
+	shared = MemoryCacheClient()
+	lease = _lease(shared, 'replica-1')
+	repo = MemoryOutboxRepository()
+	broker = FakeBroker()
+	relay = _build_relay(repo, broker, lease=lease)
+
+	task = asyncio.create_task(relay.run())
+	# Let the first tick acquire, then cancel as the lifespan does.
+	await asyncio.sleep(0)
+	await asyncio.sleep(0)
+	task.cancel()
+	with pytest.raises(asyncio.CancelledError):
+		await task
+
+	assert lease.is_held is False
+	assert _value('outbox_relay_lock_held') == 0.0
+	# The lease is free, so a peer can take over immediately instead of waiting
+	# out the whole TTL.
+	assert await _lease(shared, 'replica-2').acquire() is True
+
+
+@pytest.mark.asyncio
+async def test_relay_without_lease_is_unchanged() -> None:
+	# Back-compat guard: lease=None (the default, and every existing deployment)
+	# must keep ticking unconditionally.
+	repo = MemoryOutboxRepository()
+	repo._outbox.append(_make_row())
+	broker = FakeBroker()
+	relay = _build_relay(repo, broker, lease=None)
+
+	await relay._tick()
+
+	assert len(broker.sent) == 1

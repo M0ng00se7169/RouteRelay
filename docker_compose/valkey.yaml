@@ -1,0 +1,39 @@
+# Valkey (ADR-0008): cache-aside store, chat presence, and the outbox relay
+# leader lock. One service per file, storages.yaml conventions.
+#
+# No persistence by design: everything stored here is reconstructable ephemera
+# (rebuilt from Mongo on the next read), so RDB/AOF are deliberately off. Data
+# survives neither a restart nor a `docker compose down`.
+#
+# maxmemory-policy is `noeviction` on purpose. An LRU policy could evict
+# `lock:outbox-relay` and hand the same lease to two relays at once — the
+# at-least-once outbox tolerates duplicate sends, but silently evicting a lock
+# is exactly the kind of failure a demo stack should not pretend is fine. Under
+# memory pressure writes fail loudly instead, and the app's best-effort cache
+# wrapper (infrastructure/cache) turns that into a log line plus a pass-through
+# to Mongo.
+services:
+  valkey:
+    container_name: chat-valkey
+    image: valkey/valkey:8-alpine
+    command: ['valkey-server', '--maxmemory', '128mb', '--maxmemory-policy', 'noeviction']
+    ports:
+      - '${VALKEY_PORT}:6379'
+    healthcheck:
+      test: ['CMD', 'valkey-cli', 'ping']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - backend
+
+# NOTE: no `depends_on: valkey` in app.yaml on purpose. The app must boot with
+# every ADR-0008 feature flag OFF (tests, single-replica deploys, prod images
+# built before the valkey service existed) and compose hard-fails on a
+# depends_on naming a service that is not in the file set — which would break
+# `make app` (app.yaml alone). With flags ON the app treats a missing/slow
+# valkey as a degradation (breaker + best-effort pass-through to Mongo), not a
+# startup failure, so ordering is unnecessary.
+networks:
+  backend:
+    driver: bridge

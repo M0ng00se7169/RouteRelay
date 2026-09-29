@@ -4,6 +4,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from time import perf_counter
 
+from infrastructure.locks.base import BaseDistributedLock
 from infrastructure.message_brokers.base import BaseMessageBroker
 from infrastructure.metrics import (
 	circuit_breaker_rejected_total,
@@ -12,6 +13,8 @@ from infrastructure.metrics import (
 	outbox_publish_duration_seconds,
 	outbox_publish_errors_total,
 	outbox_published_total,
+	outbox_relay_lock_acquired_total,
+	outbox_relay_lock_held,
 	safe_inc,
 	safe_observe,
 	safe_set,
@@ -46,6 +49,37 @@ class OutboxRelay:
 	# one warning per tick instead of a doomed producer timeout on row 1.
 	# None disables the breaker (tests, dummy container).
 	circuit_breaker: CircuitBreaker | None = None
+	# ADR-0008 Chunk 5: optional leader lock. With N replicas every process
+	# polls the outbox, which is correct (at-least-once) but wasteful; the lease
+	# makes one of them the publisher. Acquire-or-skip happens at the START of a
+	# tick, so a non-leader costs one SET NX and returns — no Mongo polling at
+	# all. None disables it (the default, and the dummy container).
+	lease: BaseDistributedLock | None = None
+
+	async def _acquire_lease(self) -> bool:
+		"""Whether this tick may publish. Always True without a lease.
+
+		Renewal happens here too: a leader whose lease expired (long GC pause,
+		slow batch) re-acquires, and a leader that merely needs time extended
+		keeps its lease. Losing the lock mid-tick is safe — the outbox contract
+		is at-least-once and the next tick decides again.
+		"""
+		if self.lease is None:
+			return True
+
+		if self.lease.is_held and await self.lease.renew():
+			return True
+
+		acquired = await self.lease.acquire()
+		safe_set(outbox_relay_lock_held, 1.0 if acquired else 0.0)
+		if acquired:
+			logger.info('Acquired the outbox relay leader lock; this replica publishes')
+			safe_inc(outbox_relay_lock_acquired_total)
+		else:
+			# Expected in a multi-replica deployment, and harmless: the other
+			# holder is draining the same outbox.
+			logger.debug('Outbox relay lease is held elsewhere; skipping this tick')
+		return acquired
 
 	def _send_operation(self, row: OutboxRow) -> Callable[[], Awaitable[None]]:
 		# Closure (not a lambda bound in the loop) so mypy can infer the types —
@@ -60,6 +94,11 @@ class OutboxRelay:
 		return send
 
 	async def _tick(self) -> None:
+		# Leader lock first: a follower must not even read the outbox, otherwise
+		# the "one publisher" property buys nothing but the SET NX (ADR-0008 §7).
+		if not await self._acquire_lease():
+			return
+
 		# True backlog, not capped at batch_size (ADR-0006, G10/Chunk 2.1).
 		safe_set(outbox_pending, await self.outbox_repository.count_unsent())
 		rows = await self.outbox_repository.get_unsent(self.batch_size)
@@ -127,9 +166,18 @@ class OutboxRelay:
 		safe_set(outbox_pending, await self.outbox_repository.count_unsent())
 
 	async def run(self) -> None:
-		while True:
-			await self._tick()
-			await asyncio.sleep(self.poll_interval)
+		try:
+			while True:
+				await self._tick()
+				await asyncio.sleep(self.poll_interval)
+		finally:
+			# Give the lease back on shutdown (ADR-0008): otherwise the next
+			# replica waits out the whole TTL for a lock nobody is using. The
+			# release is owner-checked, so a lease already taken over elsewhere
+			# is left alone.
+			if self.lease is not None and self.lease.is_held:
+				await self.lease.release()
+			safe_set(outbox_relay_lock_held, 0.0)
 
 
 def build_relay(
@@ -137,10 +185,12 @@ def build_relay(
 	message_broker: BaseMessageBroker,
 	config: Config,
 	circuit_breaker: CircuitBreaker | None = None,
+	lease: BaseDistributedLock | None = None,
 ) -> OutboxRelay:
 	return OutboxRelay(
 		outbox_repository=outbox_repository,
 		message_broker=message_broker,
 		poll_interval=config.outbox_relay_poll_interval,
 		circuit_breaker=circuit_breaker,
+		lease=lease,
 	)

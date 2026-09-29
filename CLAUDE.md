@@ -1,6 +1,6 @@
 # CLAUDE.md
 
-FastAPI + Kafka + MongoDB chat backend — DDD, CQRS, event-driven.
+FastAPI + Kafka + MongoDB + Valkey chat backend — DDD, CQRS, event-driven.
 
 ## Quick references
 

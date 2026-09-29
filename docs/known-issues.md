@@ -22,7 +22,7 @@ Kept as a one-line index so old references don't dangle; details live in git his
 |---|-----|--------|
 | 1 | `ListenerAddedEventHandler.handle` wrong event type annotation | Fixed — handler refactored (`app/logic/events/messages.py`) |
 | 2 | `send_message` argument order mismatch (base vs Kafka) | Fixed — both are `(self, topic, key, value)` now |
-| 3 | `BaseConnectionManager` registered twice in `init.py` | Fixed — single registration (`init.py:160`) |
+| 3 | `BaseConnectionManager` registered twice in `init.py` | Fixed — single registration (now a `create_connection_manager()` factory, `init.py:259`) |
 | 4 | `TelegramNotificationClient` never registered | Fixed — registered in `lifespan.py`, wired when `telegram_bot_token` is set |
 | 5 | Inbound Kafka→WebSocket relay never started | Fixed — `_kafka_consumer_loop` in `lifespan.py` (but see O-1) |
 | 6 | `MemoryChatRepository` implements only 3/7 methods | Fixed — all 7 implemented (+ extras) |

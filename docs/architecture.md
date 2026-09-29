@@ -11,6 +11,7 @@ Multi-user chat backend with **DDD**, **CQRS**, and event-driven architecture.
 | API/WebSocket | FastAPI + ASGI |
 | Database | MongoDB + Motor (async driver) |
 | Message bus | Apache Kafka |
+| Cache / ephemeral state | Valkey (ADR-0008 — cache-aside, chat presence, relay leader lock) |
 | DI container | Punq |
 | Logging | stdlib logging → JSON lines (`infrastructure/logging_config.py`, parsed by Promtail) |
 
@@ -34,7 +35,8 @@ app/
 ├── application/   # HTTP/WebSocket API (FastAPI routers, schemas, lifespan)
 ├── domain/        # Entities, value objects, domain events, exceptions
 ├── logic/         # Commands, queries, event handlers, Mediator, DI container
-├── infrastructure/ # MongoDB repos, Kafka broker, WebSocket manager, adapters
+├── infrastructure/ # MongoDB repos, Kafka broker, Valkey client, WS manager, adapters
+│                   # (cache/, presence/, locks/ — all behind ABCs, see ADR-0008)
 ├── settings/      # Environment-based configuration (pydantic-settings)
 └── test/          # Unit and API tests (in-memory repos for isolation)
 ```
@@ -59,13 +61,40 @@ Background tasks started in the app lifespan:
 
 - **Outbox relay** (`infrastructure/outbox/relay.py`) polls unsent outbox rows, publishes each
   to its Kafka topic, marks it sent — it is the **only** Kafka writer. Sends are guarded by the
-  `'kafka'` circuit breaker (open ⇒ the batch is skipped and retried later).
+  `'kafka'` circuit breaker (open ⇒ the batch is skipped and retried later). With
+  `RELAY_LOCK_ENABLED=true` it also holds a Valkey leader lease, so only one replica polls at all.
 - **Consumer loop** (`application/api/lifespan.py`) consumes the topic and publishes
   `NewMessageReceivedFromBrokerEvent` → WebSocket fan-out to the chat room.
+- **Presence heartbeat** (one per accepted WebSocket, `websockets/managers.py`) refreshes the
+  socket's field in the `presence:{chat_oid}` hash every `PRESENCE_TTL_SECONDS / 3`. Cancelled on
+  disconnect; a socket that stops beating expires on its own, so an abrupt process death needs no
+  cleanup job.
 
 In-process event handlers (`logic/events/messages.py`) keep only side effects like the WebSocket
 disconnect on chat deletion — they never send to Kafka directly. Full sequence diagram:
 README → "Request flow (create message)".
+
+---
+
+## Valkey: cache, presence, and the relay lock (ADR-0008)
+
+Three optional features, all behind ABCs and all **defaulting off** in `Config()`
+(`CACHE_ENABLED`, `PRESENCE_ENABLED`, `RELAY_LOCK_ENABLED`) so the app boots and behaves exactly
+as it did before the ADR unless compose turns them on. `infrastructure/cache/valkey.py` is the
+only module that imports `valkey`.
+
+| Feature | Where | Notes |
+|---|---|---|
+| Cache-aside reads | `infrastructure/cache/cached.py` | `CircuitBreaker(Cached(Mongo))` — the cache proxy sits INSIDE the breaker so a Valkey error never counts as a Mongo failure |
+| Write-path invalidation | `logic/commands/messages.py` | A post bumps `chat:ver:{oid}`; page keys embed the version, so stale pages die by TTL with no `SCAN` in the hot path. A delete drops the detail + version keys |
+| Chat presence | `infrastructure/presence/` | `presence:{chat_oid}` hash, one field per socket, key TTL refreshed per heartbeat |
+| Relay leader lock | `infrastructure/locks/` | `SET NX PX` lease with compare-and-extend renew and compare-and-delete release |
+
+**Degradation is the contract.** Every cache call is best-effort: a failure is counted on
+`cache_errors_total`, logged, and returned as the value a cold cache would have produced. Reads
+fall through to Mongo, writes still succeed, and an open `'valkey'` breaker never surfaces as an
+HTTP 503. `noeviction` (128 MiB) keeps the relay lock from being silently evicted. Triage:
+`docs/runbooks/valkey-outage.md`.
 
 ---
 
@@ -129,7 +158,7 @@ alerting on once an operational baseline exists (ADR-0006 Q1), no rule yet;
 | `kafka_consumer_malformed_total` | Counter | — | consumer loop (`api/lifespan.py`) | Consumed messages failing validation (missing `chat_oid`/`message`) | candidate — sustained rate > 0 means a producer/schema bug |
 | `kafka_consumer_up` | Gauge | — | consumer lifecycle (`api/lifespan.py`) | 1 while the consumer loop task runs (stays 1 through reconnect backoff); 0 after graceful stop or any non-cancelled task exit | ✅ alerted — `KafkaConsumerDown` (guarded by the app's `up`) |
 | `kafka_consumer_reconnects_total` | Counter | topic | consumer loop (`api/lifespan.py`) | Reconnection attempts after the broker stream died or exited cleanly (O-1 reconnect loop with exponential backoff) | ✅ alerted — `KafkaConsumerReconnecting` |
-| `circuit_breaker_state` | Gauge | name | circuit breaker (`infrastructure/resilience.py`) | 1 while a guarded dependency's breaker is open or half-open, 0 when closed (`name='mongo'` persistence path, `name='kafka'` outbox relay sends) | candidate — instantaneous signal; the rejection counter below is the recency signal |
+| `circuit_breaker_state` | Gauge | name | circuit breaker (`infrastructure/resilience.py`) | 1 while a guarded dependency's breaker is open or half-open, 0 when closed (`name='mongo'` persistence path, `name='kafka'` outbox relay sends, `name='valkey'` cache client) | candidate — instantaneous signal; the rejection counter below is the recency signal |
 | `circuit_breaker_rejected_total` | Counter | name | circuit breaker (`infrastructure/resilience.py`) | Calls rejected fail-fast because a breaker was open (gate rejections only — the failures that trip the breaker are counted by the guarded component, e.g. `outbox_publish_errors_total`) | ✅ alerted — `OutboxRelayCircuitOpen` (`name='kafka'`) |
 | `ws_connections_active` | Gauge | — | WS manager (`websockets/managers.py`) | Live WebSocket connections across all chats (recomputed from the manager map, cannot drift) | no — capacity trend |
 | `ws_connections_accepted_total` | Counter | — | WS manager (`websockets/managers.py`) | Connections accepted | no |
@@ -144,6 +173,11 @@ alerting on once an operational baseline exists (ADR-0006 Q1), no rule yet;
 | `telegram_notifications_sent_total` | Counter | — | Telegram handler (`logic/events/messages.py`) | Successful notification delivery attempts | no — failed is the signal |
 | `telegram_notifications_failed_total` | Counter | — | Telegram handler (`logic/events/messages.py`) | Attempts that raised (logged and swallowed; nothing counted when Telegram is unconfigured) | candidate — rate > 0 |
 | `application_info` | Gauge | version | app factory (`application/api/main.py`) | Build info: constant 1, the deployed version is the label (`APP_VERSION` env) | no — deployment tracking |
+| `cache_operations_total` | Counter | operation, result | cache proxies (`infrastructure/cache/cached.py`) + Valkey client (`cache/valkey.py`) | Cache operations: `hit`/`miss` for reads, `ok` for writes and invalidations, `error` for failures (no chat oids — cache keys are full of them) | no — volume; derive the hit rate from it |
+| `cache_errors_total` | Counter | operation | Valkey client (`infrastructure/cache/valkey.py`) | Real Valkey failures, counted **pre-breaker** (rejections go to `circuit_breaker_rejected_total{name='valkey'}`) | ✅ alerted — `CacheErrorsHigh` |
+| `presence_heartbeat_failures_total` | Counter | — | WS manager (`websockets/managers.py`) | Presence heartbeat/refresh failures — a socket stopped refreshing and will be reported as gone once its TTL lapses | candidate — rate > 0 |
+| `outbox_relay_lock_acquired_total` | Counter | — | outbox relay lease (`outbox/relay.py`) | Times this process acquired the outbox relay leader lock (ADR-0008) | no — expected on every deploy/restart |
+| `outbox_relay_lock_held` | Gauge | — | outbox relay lease (`outbox/relay.py`) | 1 while this process holds the leader lease, 0 otherwise (per process; any replica reporting 1 means a leader exists) | candidate — 0 across all replicas means the relay is not publishing |
 
 > Planning new metrics? Follow `docs/adr/0006-metrics-implementation-plan.md`
 > (Section 3.2) and add them to the registry module — never define ad-hoc
@@ -164,6 +198,7 @@ Prometheus evaluates the rules in `docker_compose/prometheus-alerts.yml`
 | `KafkaConsumerDown` | `kafka_consumer_up == 0 and up{job='kafka-chat-api'} == 1` | critical | the consumer loop task is dead while the app itself is up — inbound messages stop reaching the fan-out |
 | `KafkaConsumerReconnecting` | `increase(kafka_consumer_reconnects_total[15m]) > 0` | warning | at least one consumer reconnect in the last 15m — the broker stream died or exited cleanly; delivery self-heals via backoff, repeated firing signals Kafka instability |
 | `WSBroadcastFailures` | `rate(ws_broadcast_failures_total[5m]) > 0` | warning | per-socket send failures during fan-out (clients dropping mid-broadcast) |
+| `CacheErrorsHigh` | `increase(cache_errors_total[15m]) > 0` | warning | Valkey operation failures — a **degradation, not an outage**: reads fall back to Mongo, writes keep succeeding, presence under-reports and the relay skips its ticks until the lease expires (ADR-0008) |
 
 The `outbox_pending > 200` threshold is calibrated from the 2026-09-17 Locust
 baseline (50 users, ~16 msg/s: `outbox_pending` max=35, p95=21; relay drained to
@@ -178,7 +213,8 @@ and chat id come from gitignored secret files mounted via compose secrets — se
 so every alert lands in Telegram AND in the structured JSON logs (Loki/dashboard log panel);
 `default-log` is webhook-only. **Every alert carries a
 `runbook_url` annotation** (`docs/runbooks/`: `kafka-outage.md` for the outbox/relay pair,
-`kafka-consumer.md` for the consumer pair, `ws-fanout.md` for broadcast failures), which the sink
+`kafka-consumer.md` for the consumer pair, `ws-fanout.md` for broadcast failures,
+`valkey-outage.md` for cache errors), which the sink
 appends to the logged message. Validate rules with
 `promtool check rules` before merging rule changes.
 

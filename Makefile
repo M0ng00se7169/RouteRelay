@@ -5,6 +5,7 @@ ENV = --env-file .env
 APP_FILE = docker_compose/app.yaml
 STORAGES_FILE = docker_compose/storages.yaml
 KAFKA_FILE = docker_compose/kafka.yaml
+VALKEY_FILE = docker_compose/valkey.yaml
 PROMETHEUS_FILE = docker_compose/prometheus.yaml
 ALERTMANAGER_FILE = docker_compose/alertmanager.yaml
 OBSERVABILITY_FILE = docker_compose/observability.yaml
@@ -22,9 +23,13 @@ kafka:
 storages:
 	$(DC) -f $(STORAGES_FILE) $(ENV) up --build -d
 
+.PHONY: valkey
+valkey:
+	$(DC) -f $(VALKEY_FILE) $(ENV) up --build -d
+
 .PHONY: all
 all:
-	$(DC) -f $(STORAGES_FILE) -f $(APP_FILE) -f $(KAFKA_FILE) -f $(PROMETHEUS_FILE) -f $(ALERTMANAGER_FILE) -f $(OBSERVABILITY_FILE) $(ENV) up --build -d
+	$(DC) -f $(STORAGES_FILE) -f $(APP_FILE) -f $(KAFKA_FILE) -f $(VALKEY_FILE) -f $(PROMETHEUS_FILE) -f $(ALERTMANAGER_FILE) -f $(OBSERVABILITY_FILE) $(ENV) up --build -d
 
 .PHONY: app-down
 app-down:
@@ -44,7 +49,7 @@ app-logs:
 
 .PHONY: all-down
 all-down:
-	$(DC) -f $(STORAGES_FILE) -f $(APP_FILE) -f $(KAFKA_FILE) -f $(PROMETHEUS_FILE) -f $(ALERTMANAGER_FILE) -f $(OBSERVABILITY_FILE) down
+	$(DC) -f $(STORAGES_FILE) -f $(APP_FILE) -f $(KAFKA_FILE) -f $(VALKEY_FILE) -f $(PROMETHEUS_FILE) -f $(ALERTMANAGER_FILE) -f $(OBSERVABILITY_FILE) down
 
 .PHONY: observability
 observability:
@@ -57,6 +62,14 @@ observability-down:
 .PHONY: observability-logs
 observability-logs:
 	$(DC) -f $(OBSERVABILITY_FILE) logs -f
+
+.PHONY: valkey-down
+valkey-down:
+	$(DC) -f $(VALKEY_FILE) down
+
+.PHONY: valkey-logs
+valkey-logs:
+	$(DC) -f $(VALKEY_FILE) logs -f
 
 .PHONY: kafka-down
 kafka-down:
