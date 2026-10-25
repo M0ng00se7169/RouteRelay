@@ -45,6 +45,8 @@ from infrastructure.repositories.messages.memory import (
 	MemoryMessagesRepository,
 )
 from logic.commands.messages import (
+	AddTelegramListenerCommand,
+	AddTelegramListenerCommandHandler,
 	CreateMessageCommand,
 	CreateMessageCommandHandler,
 	DeleteChatCommand,
@@ -270,6 +272,84 @@ async def test_delete_does_not_invalidate_other_chats(
 
 	assert await cache.get(chat_cache_key('chat-1')) is None
 	assert await cache.get(chat_cache_key('chat-2')) is not None
+
+
+# --- listener registration invalidates the chat detail (ADR-0008 §9, dev. 3) --
+
+
+def _add_listener_handler(
+	chats: BaseChatsRepository,
+	cache: MemoryCacheClient,
+) -> AddTelegramListenerCommandHandler:
+	return AddTelegramListenerCommandHandler(
+		_mediator=FakeMediator(),
+		chats_repository=chats,
+		outbox_repository=MemoryOutboxRepository(),
+		session_provider=NoopSessionProvider(),
+		cache=cache,
+	)
+
+
+@pytest.mark.asyncio
+async def test_new_listener_invalidates_the_cached_chat_detail(
+	chats: MemoryChatRepository,
+	cache: MemoryCacheClient,
+) -> None:
+	cached_chats = _cached_chats(chats, cache)
+	detail = GetChatDetailQueryHandler(
+		chats_repository=cached_chats,
+		messages_repository=MemoryMessagesRepository(),
+	)
+
+	# Warm the cache: the entry (with its empty listener set) is now stale.
+	before = await detail.handle(GetChatDetailQuery(chat_oid='chat-1'))
+	assert before.listeners == set()
+	assert await cache.get(chat_cache_key('chat-1')) is not None
+
+	await _add_listener_handler(cached_chats, cache).handle(
+		AddTelegramListenerCommand(chat_oid='chat-1', telegram_chat_id='tg-1'),
+	)
+
+	# The entry must be GONE, not merely overwritten: the next read goes to the
+	# source of truth and sees the listener.
+	assert await cache.get(chat_cache_key('chat-1')) is None
+	after = await detail.handle(GetChatDetailQuery(chat_oid='chat-1'))
+	assert {listener.oid for listener in after.listeners} == {'tg-1'}
+
+
+@pytest.mark.asyncio
+async def test_listener_add_does_not_touch_messages_version(
+	chats: MemoryChatRepository,
+	cache: MemoryCacheClient,
+) -> None:
+	# Only the detail entry carries listeners; message pages are keyed by the
+	# generation counter, which a listener add must not move.
+	cached_chats = _cached_chats(chats, cache)
+
+	await _add_listener_handler(cached_chats, cache).handle(
+		AddTelegramListenerCommand(chat_oid='chat-1', telegram_chat_id='tg-1'),
+	)
+
+	assert await cache.get(chat_version_key('chat-1')) is None
+
+
+@pytest.mark.asyncio
+async def test_listener_add_succeeds_even_when_the_cache_is_gone(
+	chats: MemoryChatRepository,
+	messages: MemoryMessagesRepository,
+) -> None:
+	# Degradation contract: a cache outage must not fail the command. The
+	# in-memory client here stands in for a Valkey that swallowed its own errors.
+	class BrokenCache(MemoryCacheClient):
+		async def delete(self, key: str) -> None:
+			return None
+
+	await _add_listener_handler(chats, BrokenCache()).handle(
+		AddTelegramListenerCommand(chat_oid='chat-1', telegram_chat_id='tg-1'),
+	)
+
+	listeners = await chats.get_all_chat_listeners('chat-1')
+	assert {listener.oid for listener in listeners} == {'tg-1'}
 
 
 # --- degradation -------------------------------------------------------------

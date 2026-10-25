@@ -352,6 +352,10 @@ def build_mediator(container: Container, config: Config) -> Mediator:
             chats_repository=container.resolve(BaseChatsRepository),
             outbox_repository=container.resolve(BaseOutboxRepository),
             session_provider=container.resolve(SessionProvider),
+            # ADR-0008 §9 deviation 3: invalidates the cached chat detail entry
+            # (it carries the listener set). Always resolved — with the feature
+            # flag off it is the in-memory client, like the other handlers.
+            cache=container.resolve(BaseCacheClient),
         )
 
     # NOTE: handlers are registered via factories (deferred), NOT instances:

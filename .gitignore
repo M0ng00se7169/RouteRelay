@@ -12,3 +12,12 @@ docs/pi-spec/
 .pi/
 .freebuff/
 docker_compose/alertmanager/secrets/
+# Agent/assistant working files (not part of the product)
+.openclaude/
+.pi/
+.scratch/
+.playwright-mcp/
+.agent/
+.freebuff/
+agents.md
+PROJECT_MEMORY.md

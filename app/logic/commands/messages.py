@@ -216,6 +216,9 @@ class AddTelegramListenerCommandHandler(CommandHandler[AddTelegramListenerComman
     chats_repository: BaseChatsRepository
     outbox_repository: BaseOutboxRepository
     session_provider: SessionProvider
+    # ADR-0008 §9 deviation 3: the cached Chat carries its listener set, so the
+    # handler needs the cache to invalidate the detail entry after the write.
+    cache: BaseCacheClient
 
     async def handle(self, command: AddTelegramListenerCommand) -> ChatListener:
         chat: Chat | None = await self.chats_repository.get_chat_by_oid(command.chat_oid)
@@ -238,6 +241,14 @@ class AddTelegramListenerCommandHandler(CommandHandler[AddTelegramListenerComman
                 'insert', 'outbox',
                 lambda: self.outbox_repository.save_events(events, session=session),
             )
+        # ADR-0008 §9 deviation 3: the cached Chat entry carries its listener
+        # set, so without this delete GET /chat/{oid}/ serves a chat without the
+        # new listener for up to CACHE_TTL_SECONDS. Messages pages are untouched
+        # (they carry no listeners), so no version bump is needed. Done AFTER the
+        # transaction commits, like every invalidation in this module, and
+        # best-effort by the cache client's contract.
+        await self.cache.delete(chat_cache_key(command.chat_oid))
+        safe_inc(cache_operations_total, operation='delete', result='ok')
         await self._mediator.publish(events)
 
         return ChatListener(oid=command.telegram_chat_id)

@@ -37,6 +37,7 @@ dev = [
     # starlette.testclient prefers httpx2; plain httpx fallback is deprecated and
     # goes away in starlette 2.0. Runtime httpx stays (Telegram client + fastapi[httpx]).
     "httpx2>=2.13.1,<3",
+    "pytest-cov>=7.1.0",
 ]
 
 # Note: there is deliberately NO [build-system] — this repository is an
