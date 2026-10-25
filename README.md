@@ -73,7 +73,7 @@ inhibition pairs, Telegram transport, silencing procedure).
 The codebase follows a layered, DDD-style layout:
 
 ```
-fastapi_examples/
+routerelay/
 ├── app/                 # layered DDD layout — see "Architecture" below
 │   ├── application/     # HTTP/WebSocket API (FastAPI routers, schemas)
 │   ├── domain/          # Entities, value objects, domain events, exceptions

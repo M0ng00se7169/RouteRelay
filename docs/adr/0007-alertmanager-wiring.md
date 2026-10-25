@@ -328,7 +328,7 @@ URLs):
 | Layer | Check | Tool |
 |---|---|---|
 | Config syntax | `amtool check-config` (v3: `--entrypoint=amtool`) | docker run, same mount pattern as promtool |
-| Routing correctness | `amtool config routes test` for all 6 alerts × severities | amtool CLI |
+| Routing correctness | `amtool config routes test` for all 7 alerts × severities | amtool CLI |
 | Wiring | Prometheus `/status/config` shows `alerting:`; `/api/v1/alertmanagers` shows the peer | curl |
 | End-to-end | temporary always-firing rule → receiver gets it; silence it → notifications stop | live stack |
 | Inhibition | fire CircuitOpen + Failing together → only CircuitOpen notifies | live stack / `amtool` |
@@ -339,5 +339,5 @@ URLs):
   and the end-to-end firing test in Chunk 1 acceptance.
 - **Compose file-list drift** (up/down/all include different files) — the session's orphan-container
   warning shows this is real; keep the target definitions symmetric, one PR per chunk.
-- **Notification storms** during a full outage (6 alerts × repeats) — mitigated by grouping,
+- **Notification storms** during a full outage (7 alerts × repeats) — mitigated by grouping,
   inhibition rules, and the severity-asymmetric repeat intervals.
